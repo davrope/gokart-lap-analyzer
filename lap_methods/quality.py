@@ -69,6 +69,22 @@ def quality_summary_gps_gate(result: dict, params) -> dict:
         med = float(np.median(lt))
         out["lap_time_mad_s"] = float(np.median(np.abs(lt - med)))
 
+        # -----------------------
+    # 1b) Lap distance consistency (requires lap_metrics["lap_distance_m"])
+    # -----------------------
+    if lap_metrics is not None and not lap_metrics.empty and "lap_distance_m" in lap_metrics.columns:
+        ld = lap_metrics["lap_distance_m"].to_numpy(dtype=float)
+        out["lap_dist_mean_m"] = float(np.mean(ld))
+        out["lap_dist_std_m"] = float(np.std(ld, ddof=1)) if len(ld) > 1 else 0.0
+        out["lap_dist_cv"] = float(out["lap_dist_std_m"] / out["lap_dist_mean_m"]) if out["lap_dist_mean_m"] else np.nan
+        med_d = float(np.median(ld))
+        out["lap_dist_mad_m"] = float(np.median(np.abs(ld - med_d)))
+    else:
+        out["lap_dist_mean_m"] = np.nan
+        out["lap_dist_std_m"] = np.nan
+        out["lap_dist_cv"] = np.nan
+        out["lap_dist_mad_m"] = np.nan
+
     # -----------------------
     # 2) Within-lap shape consistency (speed)
     # -----------------------
@@ -180,18 +196,23 @@ def quality_summary_gps_gate(result: dict, params) -> dict:
 
     # A simple single “quality score” (optional heuristic)
     # Lower is better for CV/spread/shift; higher is better for shape_corr/fast_frac
-    # You can tweak weights later.
     score = 0.0
     if np.isfinite(out.get("lap_time_cv", np.nan)):
         score += 2.0 * out["lap_time_cv"]
+
+    # NEW: lap distance consistency penalty
+    if np.isfinite(out.get("lap_dist_cv", np.nan)):
+        score += 1.5 * out["lap_dist_cv"]
+
     if np.isfinite(out.get("boundary_spread_m", np.nan)):
         score += 0.02 * out["boundary_spread_m"]
     if np.isfinite(out.get("stable_median_shift_s", np.nan)):
         score += 0.5 * out["stable_median_shift_s"]
     if np.isfinite(out.get("shape_corr_mean", np.nan)):
-        score += 1.0 * (1.0 - out["shape_corr_mean"])  # closer to 1 is better
+        score += 1.0 * (1.0 - out["shape_corr_mean"])
     if np.isfinite(out.get("boundary_fast_frac", np.nan)):
         score += 0.5 * (1.0 - out["boundary_fast_frac"])
     out["quality_score_heuristic"] = float(score) if score != 0.0 else np.nan
+
 
     return out

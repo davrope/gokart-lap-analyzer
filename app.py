@@ -8,7 +8,7 @@ from lap_methods import get_methods, default_params, params_to_dict
 from lap_methods.ui import render_params_form
 from lap_methods.quality import quality_summary_gps_gate
 from viz.plots import make_plots
-
+from lap_methods.metrics import add_lap_distance_metrics
 
 st.set_page_config(page_title="FIT Lap Analyzer", layout="wide")
 st.title("FIT Lap Analyzer")
@@ -37,6 +37,8 @@ runner = methods[method_name]["runner"]
 
 try:
     result = runner(fit_bytes, params)
+    result = add_lap_distance_metrics(result)
+
 except Exception as e:
     st.error(f"Failed to analyze file: {e}")
     st.stop()
@@ -116,6 +118,10 @@ else:
         b.metric("Lap time CV", f"{q.get('lap_time_cv'):.3f}" if np.isfinite(q.get("lap_time_cv", np.nan)) else "—")
         c.metric("Shape corr (mean)", f"{q.get('shape_corr_mean'):.3f}" if np.isfinite(q.get("shape_corr_mean", np.nan)) else "—")
         d.metric("Boundary spread (m)", f"{q.get('boundary_spread_m'):.1f}" if np.isfinite(q.get("boundary_spread_m", np.nan)) else "—")
+
+        e, f = st.columns(2)
+        e.metric("Lap dist CV", f"{q.get('lap_dist_cv'):.3f}" if np.isfinite(q.get("lap_dist_cv", np.nan)) else "—")
+        f.metric("Lap dist MAD (m)", f"{q.get('lap_dist_mad_m'):.1f}" if np.isfinite(q.get("lap_dist_mad_m", np.nan)) else "—")
 
         # Detail table
         dfq = pd.DataFrame([q]).T.reset_index()
