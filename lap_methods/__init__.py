@@ -6,6 +6,7 @@ from typing import Any, Dict, Tuple
 from .gps_gate import GpsGateParams, run as run_gps_gate
 from .dtw_template import DtwTemplateParams, run as run_dtw_template
 from .spectral_phase import SpectralPhaseParams, run as run_spectral_phase
+from .loop_closure_phase import LoopClosurePhaseParams, run as run_loop_closure_phase
 
 METHODS = {
     "GPS Gate (fast-points + distance minima)": {
@@ -19,6 +20,10 @@ METHODS = {
     "Spectral Phase (self-supervised)": {
     "params_cls": SpectralPhaseParams,
     "runner": run_spectral_phase,
+    },
+    "Loop closure + phase consistency": {
+    "params_cls": LoopClosurePhaseParams,
+    "runner": run_loop_closure_phase,
     },
 
 }
