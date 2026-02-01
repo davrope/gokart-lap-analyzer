@@ -241,38 +241,268 @@ def plot_distance_to_gate(
 
 
 def make_plots(result: dict, params, track_view: str):
-    """
-    One place to build all figures.
-    Each plot gracefully handles missing data from methods.
-    """
     gps = _safe_get(result, "gps")
-    if gps is None or not isinstance(gps, pd.DataFrame):
-        raise ValueError("Result is missing a gps DataFrame.")
-
     fast_pts = _safe_get(result, "fast_pts", None)
     gate_lat = _safe_get(result, "gate_lat", None)
     gate_lon = _safe_get(result, "gate_lon", None)
     dist = _safe_get(result, "dist", None)
     pass_idx = _safe_get(result, "pass_idx", None)
+    laps = _safe_get(result, "laps", None)
 
     speed_for_gate = getattr(params, "speed_for_gate", None)
     near_m = getattr(params, "near_m", None)
 
     fig_track = plot_track(
-        gps,
-        track_view=track_view,
-        fast_pts=fast_pts,
-        gate_lat=gate_lat,
-        gate_lon=gate_lon,
-        pass_idx=pass_idx,
-        speed_for_gate=speed_for_gate,
+        gps, track_view=track_view,
+        fast_pts=fast_pts, gate_lat=gate_lat, gate_lon=gate_lon,
+        pass_idx=pass_idx, speed_for_gate=speed_for_gate
     )
 
-    fig_dist = plot_distance_to_gate(
-        gps,
-        dist=dist,
-        pass_idx=pass_idx,
-        near_m=near_m,
-    )
+    fig_dist = plot_distance_to_gate(gps, dist=dist, pass_idx=pass_idx, near_m=near_m)
 
-    return fig_track, fig_dist
+    fig_timeline = plot_lap_timeline(gps, pass_idx=pass_idx, laps=laps)
+    fig_step = plot_lap_step(gps, pass_idx=pass_idx)
+
+    fig_distdomain = plot_laps_through_distance(gps, pass_idx=pass_idx, laps=laps)
+    return fig_track, fig_dist, fig_timeline, fig_step, fig_distdomain
+
+
+def plot_lap_timeline(gps: pd.DataFrame, pass_idx, laps: pd.DataFrame | None = None) -> go.Figure:
+    """
+    Universal view: laps through time (works for all methods).
+    Shows boundary lines + lap bands + speed overlay.
+    """
+    import numpy as np
+    import plotly.graph_objects as go
+
+    fig = go.Figure()
+    pass_idx = np.array(pass_idx, dtype=int) if pass_idx is not None else np.array([], dtype=int)
+
+    # Speed line (if present)
+    if "speed_kmh" in gps.columns and gps["speed_kmh"].notna().any():
+        fig.add_trace(go.Scatter(
+            x=gps["timestamp"],
+            y=gps["speed_kmh"],
+            mode="lines",
+            name="Speed (km/h)",
+            line=dict(width=2),
+            hovertemplate="Time: %{x}<br>Speed: %{y:.1f} km/h<extra></extra>",
+        ))
+        y_title = "Speed (km/h)"
+    else:
+        y_title = "Value"
+        fig.add_trace(go.Scatter(
+            x=gps["timestamp"],
+            y=np.zeros(len(gps)),
+            mode="lines",
+            name="Timeline",
+            hoverinfo="skip",
+        ))
+
+    # Lap bands from laps DataFrame if available (preferred)
+    shapes = []
+    annotations = []
+
+    if laps is not None and isinstance(laps, pd.DataFrame) and not laps.empty:
+        for _, r in laps.iterrows():
+            # translucent band per lap (alternating)
+            lap = int(r["lap"])
+            fill = "rgba(0,0,0,0.04)" if lap % 2 == 0 else "rgba(0,0,0,0.02)"
+            shapes.append(dict(
+                type="rect",
+                xref="x", yref="paper",
+                x0=r["start"], x1=r["end"],
+                y0=0, y1=1,
+                fillcolor=fill,
+                line=dict(width=0),
+                layer="below",
+            ))
+            annotations.append(dict(
+                x=r["start"],
+                y=1.02,
+                xref="x",
+                yref="paper",
+                text=f"Lap {lap}",
+                showarrow=False,
+                font=dict(size=11),
+            ))
+
+    # Boundary lines (always)
+    if len(pass_idx) > 0:
+        for i, idx in enumerate(pass_idx):
+            ts = gps.iloc[idx]["timestamp"]
+            shapes.append(dict(
+                type="line",
+                xref="x", yref="paper",
+                x0=ts, x1=ts,
+                y0=0, y1=1,
+                line=dict(color="orange", width=2, dash="dot"),
+                layer="above",
+            ))
+
+    fig.update_layout(
+        title="Laps through time (boundaries + lap bands)",
+        xaxis_title="Time",
+        yaxis_title=y_title,
+        height=360,
+        margin=dict(l=40, r=40, t=60, b=40),
+        shapes=shapes,
+        annotations=annotations,
+        legend=dict(orientation="h"),
+    )
+    return fig
+
+def plot_lap_step(gps: pd.DataFrame, pass_idx) -> go.Figure:
+    import numpy as np
+    import plotly.graph_objects as go
+
+    pass_idx = np.array(pass_idx, dtype=int) if pass_idx is not None else np.array([], dtype=int)
+
+    if len(pass_idx) < 2:
+        fig = go.Figure()
+        fig.update_layout(
+            title="Lap index over time",
+            height=260,
+            annotations=[dict(
+                text="Not enough boundaries to build lap index plot.",
+                x=0.5, y=0.5, xref="paper", yref="paper",
+                showarrow=False,
+            )]
+        )
+        return fig
+
+    t = gps.iloc[pass_idx]["timestamp"].reset_index(drop=True)
+
+    # Build staircase from boundaries
+    xs = []
+    ys = []
+    for lap in range(1, len(t)):
+        xs.extend([t.iloc[lap-1], t.iloc[lap]])
+        ys.extend([lap, lap])
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=xs, y=ys,
+        mode="lines",
+        name="Lap index",
+        line=dict(width=3),
+        hovertemplate="Time: %{x}<br>Lap: %{y}<extra></extra>",
+    ))
+
+    fig.update_layout(
+        title="Lap index over time (staircase)",
+        xaxis_title="Time",
+        yaxis_title="Lap #",
+        height=260,
+        margin=dict(l=40, r=40, t=60, b=40),
+    )
+    return fig
+def cumulative_distance_m(gps: pd.DataFrame) -> np.ndarray:
+    """
+    Approx cumulative distance from successive lat/lon points using haversine.
+    Returns array same length as gps.
+    """
+    lat = gps["lat"].to_numpy(dtype=float)
+    lon = gps["lon"].to_numpy(dtype=float)
+
+    # Haversine in meters (vectorized)
+    R = 6371000.0
+    lat1 = np.radians(lat[:-1]); lon1 = np.radians(lon[:-1])
+    lat2 = np.radians(lat[1:]);  lon2 = np.radians(lon[1:])
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    a = np.sin(dlat/2)**2 + np.cos(lat1)*np.cos(lat2)*np.sin(dlon/2)**2
+    step = 2 * R * np.arctan2(np.sqrt(a), np.sqrt(1-a))
+
+    step = np.nan_to_num(step, nan=0.0, posinf=0.0, neginf=0.0)
+    s = np.concatenate([[0.0], np.cumsum(step)])
+    return s
+
+def plot_laps_through_distance(gps: pd.DataFrame, pass_idx, laps: pd.DataFrame | None = None) -> go.Figure:
+    """
+    Universal view: laps through *distance covered*.
+    X-axis is cumulative distance (m).
+    Shows boundary lines and optional lap bands, with speed overlay if available.
+    """
+    pass_idx = np.array(pass_idx, dtype=int) if pass_idx is not None else np.array([], dtype=int)
+
+    s = cumulative_distance_m(gps)
+
+    fig = go.Figure()
+
+    # Speed overlay (if available)
+    if "speed_kmh" in gps.columns and gps["speed_kmh"].notna().any():
+        fig.add_trace(go.Scatter(
+            x=s,
+            y=gps["speed_kmh"],
+            mode="lines",
+            name="Speed (km/h)",
+            line=dict(width=2),
+            hovertemplate="Dist: %{x:.1f} m<br>Speed: %{y:.1f} km/h<extra></extra>",
+        ))
+        y_title = "Speed (km/h)"
+    else:
+        fig.add_trace(go.Scatter(
+            x=s,
+            y=np.zeros(len(gps)),
+            mode="lines",
+            name="Timeline",
+            hoverinfo="skip",
+        ))
+        y_title = "Value"
+
+    shapes = []
+    annotations = []
+
+    # Lap bands (optional)
+    if laps is not None and isinstance(laps, pd.DataFrame) and not laps.empty:
+        # Convert lap start/end timestamps to distance positions by nearest timestamp
+        t = gps["timestamp"].to_numpy()
+        for _, r in laps.iterrows():
+            lap = int(r["lap"])
+            # nearest indices
+            i0 = int(np.argmin(np.abs(t - np.datetime64(r["start"]))))
+            i1 = int(np.argmin(np.abs(t - np.datetime64(r["end"]))))
+            x0, x1 = float(s[i0]), float(s[i1])
+            fill = "rgba(0,0,0,0.04)" if lap % 2 == 0 else "rgba(0,0,0,0.02)"
+            shapes.append(dict(
+                type="rect",
+                xref="x", yref="paper",
+                x0=x0, x1=x1,
+                y0=0, y1=1,
+                fillcolor=fill,
+                line=dict(width=0),
+                layer="below",
+            ))
+            annotations.append(dict(
+                x=x0, y=1.02,
+                xref="x", yref="paper",
+                text=f"Lap {lap}",
+                showarrow=False,
+                font=dict(size=11),
+            ))
+
+    # Boundary lines
+    if len(pass_idx) > 0:
+        for idx in pass_idx:
+            x = float(s[idx])
+            shapes.append(dict(
+                type="line",
+                xref="x", yref="paper",
+                x0=x, x1=x,
+                y0=0, y1=1,
+                line=dict(color="orange", width=2, dash="dot"),
+                layer="above",
+            ))
+
+    fig.update_layout(
+        title="Laps through distance (boundaries + lap bands)",
+        xaxis_title="Cumulative distance (m)",
+        yaxis_title=y_title,
+        height=360,
+        margin=dict(l=40, r=40, t=60, b=40),
+        shapes=shapes,
+        annotations=annotations,
+        legend=dict(orientation="h"),
+    )
+    return fig

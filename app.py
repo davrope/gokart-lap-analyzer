@@ -91,11 +91,13 @@ else:
     if show_plots:
         st.subheader("Plots")
 
-        fig_track, fig_dist = make_plots(result, params, track_view=track_view)
+        fig_track, fig_dist, fig_timeline, fig_step, fig_distdomain = make_plots(result, params, track_view=track_view)
 
         st.plotly_chart(fig_track, use_container_width=True)
         st.plotly_chart(fig_dist, use_container_width=True)
-
+        st.plotly_chart(fig_timeline, use_container_width=True)
+        st.plotly_chart(fig_step, use_container_width=True)
+        st.plotly_chart(fig_distdomain, use_container_width=True)
 
     st.subheader("Quality summary (no ground truth)")
 
