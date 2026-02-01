@@ -86,140 +86,185 @@ if show_plots:
 
     st.subheader("Interactive plots")
 
-if track_view == "Map background":
+    if track_view == "Map background":
 
-    # Compute padded bounds
-    lat_min, lat_max = gps["lat"].min(), gps["lat"].max()
-    lon_min, lon_max = gps["lon"].min(), gps["lon"].max()
+        # Compute padded bounds
+        lat_min, lat_max = gps["lat"].min(), gps["lat"].max()
+        lon_min, lon_max = gps["lon"].min(), gps["lon"].max()
 
-    # Padding as a fraction of the total span
-    PAD_FRAC = 0.15  # 15% padding looks good for tracks
+        # Padding as a fraction of the total span
+        PAD_FRAC = 0.15  # 15% padding looks good for tracks
 
-    lat_pad = (lat_max - lat_min) * PAD_FRAC
-    lon_pad = (lon_max - lon_min) * PAD_FRAC
+        lat_pad = (lat_max - lat_min) * PAD_FRAC
+        lon_pad = (lon_max - lon_min) * PAD_FRAC
 
-    bounds = dict(
-        west=float(lon_min - lon_pad),
-        east=float(lon_max + lon_pad),
-        south=float(lat_min - lat_pad),
-        north=float(lat_max + lat_pad),
-    )
+        bounds = dict(
+            west=float(lon_min - lon_pad),
+            east=float(lon_max + lon_pad),
+            south=float(lat_min - lat_pad),
+            north=float(lat_max + lat_pad),
+        )
 
-    # MAP VERSION (Scattermapbox)
-    fig_track = go.Figure()
+        # MAP VERSION (Scattermapbox)
+        fig_track = go.Figure()
 
-    fig_track.add_trace(go.Scattermapbox(
-        lat=gps["lat"], lon=gps["lon"],
-        mode="lines",
-        name="Track",
-        line=dict(width=3),
-        hoverinfo="skip",
-    ))
-
-    fig_track.add_trace(go.Scattermapbox(
-        lat=fast_pts["lat"], lon=fast_pts["lon"],
-        mode="markers",
-        name=f"Speed ≥ {params.speed_for_gate} km/h (gate search)",
-        marker=dict(size=6),
-        hovertemplate="Lat: %{lat:.6f}<br>Lon: %{lon:.6f}<extra></extra>",
-    ))
-
-    fig_track.add_trace(go.Scattermapbox(
-        lat=[gate_lat], lon=[gate_lon],
-        mode="markers",
-        name="Gate center",
-        marker=dict(size=14, color="orange"),
-        hovertemplate="Gate<br>Lat: %{lat:.6f}<br>Lon: %{lon:.6f}<extra></extra>",
-    ))
-
-    if len(pass_idx) > 0:
         fig_track.add_trace(go.Scattermapbox(
-            lat=gps.loc[pass_idx, "lat"],
-            lon=gps.loc[pass_idx, "lon"],
-            mode="markers",
-            name="Detected passes",
-            marker=dict(size=10, color="red"),
-            hovertemplate="PASS<br>%{lat:.6f}, %{lon:.6f}<extra></extra>",
+            lat=gps["lat"], lon=gps["lon"],
+            mode="lines",
+            name="Track",
+            line=dict(width=3),
+            hoverinfo="skip",
         ))
 
-    center_lat = float(gps["lat"].median())
-    center_lon = float(gps["lon"].median())
+        fig_track.add_trace(go.Scattermapbox(
+            lat=fast_pts["lat"], lon=fast_pts["lon"],
+            mode="markers",
+            name=f"Speed ≥ {params.speed_for_gate} km/h (gate search)",
+            marker=dict(size=6),
+            hovertemplate="Lat: %{lat:.6f}<br>Lon: %{lon:.6f}<extra></extra>",
+        ))
 
-    fig_track.update_layout(
-        title="GPS Track (map background)",
-        mapbox=dict(
-            style="open-street-map",  # no token needed
-            center=dict(lat=center_lat, lon=center_lon),
-            zoom=16,
-        ),
-        height=600,
-        margin=dict(l=10, r=10, t=60, b=10),
-        legend=dict(orientation="h"),
-    )
+        fig_track.add_trace(go.Scattermapbox(
+            lat=[gate_lat], lon=[gate_lon],
+            mode="markers",
+            name="Gate center",
+            marker=dict(size=14, color="orange"),
+            hovertemplate="Gate<br>Lat: %{lat:.6f}<br>Lon: %{lon:.6f}<extra></extra>",
+        ))
 
-    try:
+        if len(pass_idx) > 0:
+            fig_track.add_trace(go.Scattermapbox(
+                lat=gps.loc[pass_idx, "lat"],
+                lon=gps.loc[pass_idx, "lon"],
+                mode="markers",
+                name="Detected passes",
+                marker=dict(size=10, color="red"),
+                hovertemplate="PASS<br>%{lat:.6f}, %{lon:.6f}<extra></extra>",
+            ))
+
+        center_lat = float(gps["lat"].median())
+        center_lon = float(gps["lon"].median())
+
         fig_track.update_layout(
+            title="GPS Track (map background)",
             mapbox=dict(
-                style="open-street-map",
+                style="open-street-map",  # no token needed
+                center=dict(lat=center_lat, lon=center_lon),
+                zoom=16,
             ),
-            mapbox_bounds=bounds,
             height=600,
             margin=dict(l=10, r=10, t=60, b=10),
             legend=dict(orientation="h"),
         )
 
-    except Exception:
-        pass
+        try:
+            fig_track.update_layout(
+                mapbox=dict(
+                    style="open-street-map",
+                ),
+                mapbox_bounds=bounds,
+                height=600,
+                margin=dict(l=10, r=10, t=60, b=10),
+                legend=dict(orientation="h"),
+            )
 
-else:
-    # CARTESIAN VERSION (lon vs lat)
-    fig_track = go.Figure()
+        except Exception:
+            pass
 
-    fig_track.add_trace(go.Scatter(
-        x=gps["lon"], y=gps["lat"],
-        mode="lines",
-        name="All points",
-        line=dict(width=2),
-        hoverinfo="skip",
-    ))
+    else:
+        # CARTESIAN VERSION (lon vs lat)
+        fig_track = go.Figure()
 
-    fig_track.add_trace(go.Scatter(
-        x=fast_pts["lon"], y=fast_pts["lat"],
-        mode="markers",
-        name=f"Speed ≥ {params.speed_for_gate} km/h (gate search)",
-        marker=dict(size=5),
-        hovertemplate="Lon: %{x:.6f}<br>Lat: %{y:.6f}<extra></extra>",
-    ))
-
-    fig_track.add_trace(go.Scatter(
-        x=[gate_lon], y=[gate_lat],
-        mode="markers",
-        name="Gate center",
-        marker=dict(size=14, color="orange", symbol="star"),
-        hovertemplate="Gate<br>Lon: %{x:.6f}<br>Lat: %{y:.6f}<extra></extra>",
-    ))
-
-    if len(pass_idx) > 0:
         fig_track.add_trace(go.Scatter(
-            x=gps.loc[pass_idx, "lon"],
-            y=gps.loc[pass_idx, "lat"],
-            mode="markers",
-            name="Detected passes",
-            marker=dict(size=8, color="red"),
-            hovertemplate="PASS<br>Lon: %{x:.6f}<br>Lat: %{y:.6f}<extra></extra>",
+            x=gps["lon"], y=gps["lat"],
+            mode="lines",
+            name="All points",
+            line=dict(width=2),
+            hoverinfo="skip",
         ))
 
-    fig_track.update_layout(
-        title="GPS Track (Cartesian)",
-        xaxis_title="Longitude",
-        yaxis_title="Latitude",
-        yaxis_scaleanchor="x",  # keep aspect ratio
-        height=550,
+        fig_track.add_trace(go.Scatter(
+            x=fast_pts["lon"], y=fast_pts["lat"],
+            mode="markers",
+            name=f"Speed ≥ {params.speed_for_gate} km/h (gate search)",
+            marker=dict(size=5),
+            hovertemplate="Lon: %{x:.6f}<br>Lat: %{y:.6f}<extra></extra>",
+        ))
+
+        fig_track.add_trace(go.Scatter(
+            x=[gate_lon], y=[gate_lat],
+            mode="markers",
+            name="Gate center",
+            marker=dict(size=14, color="orange", symbol="star"),
+            hovertemplate="Gate<br>Lon: %{x:.6f}<br>Lat: %{y:.6f}<extra></extra>",
+        ))
+
+        if len(pass_idx) > 0:
+            fig_track.add_trace(go.Scatter(
+                x=gps.loc[pass_idx, "lon"],
+                y=gps.loc[pass_idx, "lat"],
+                mode="markers",
+                name="Detected passes",
+                marker=dict(size=8, color="red"),
+                hovertemplate="PASS<br>Lon: %{x:.6f}<br>Lat: %{y:.6f}<extra></extra>",
+            ))
+
+        fig_track.update_layout(
+            title="GPS Track (Cartesian)",
+            xaxis_title="Longitude",
+            yaxis_title="Latitude",
+            yaxis_scaleanchor="x",  # keep aspect ratio
+            height=550,
+            margin=dict(l=40, r=40, t=60, b=40),
+            legend=dict(orientation="h"),
+        )
+
+    st.plotly_chart(fig_track, use_container_width=True)
+
+
+    st.subheader("Distance to gate over time")
+
+    fig_dist = go.Figure()
+
+    # Main distance line
+    fig_dist.add_trace(go.Scatter(
+        x=gps["timestamp"],
+        y=dist,
+        mode="lines",
+        name="Distance to gate",
+        line=dict(width=2),
+        hovertemplate="Time: %{x}<br>Distance: %{y:.1f} m<extra></extra>",
+    ))
+
+    # Detected passes (minima)
+    if len(pass_idx) > 0:
+        fig_dist.add_trace(go.Scatter(
+            x=gps.loc[pass_idx, "timestamp"],
+            y=dist[pass_idx],
+            mode="markers",
+            name="Detected passes",
+            marker=dict(size=9, color="orange"),
+            hovertemplate="PASS<br>%{x}<br>%{y:.1f} m<extra></extra>",
+        ))
+
+    # Threshold line (near_m)
+    fig_dist.add_hline(
+        y=float(params.near_m),
+        line_dash="dash",
+        annotation_text=f"near_m = {params.near_m} m",
+        annotation_position="top right",
+    )
+
+    fig_dist.update_layout(
+        title="Distance to gate over time (passes = minima)",
+        xaxis_title="Time",
+        yaxis_title="Distance (meters)",
+        height=320,
         margin=dict(l=40, r=40, t=60, b=40),
         legend=dict(orientation="h"),
     )
 
-st.plotly_chart(fig_track, use_container_width=True)
+    st.plotly_chart(fig_dist, use_container_width=True)
 
 
 #These plots are from the previous person using pyplot.
