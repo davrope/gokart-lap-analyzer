@@ -1,10 +1,12 @@
 import streamlit as st
 import numpy as np
 import plotly.graph_objects as go
+import pandas as pd
 
 
 from lap_methods import get_methods, default_params, params_to_dict
 from lap_methods.ui import render_params_form
+from lap_methods.quality import quality_summary_gps_gate
 
 
 st.set_page_config(page_title="FIT Lap Analyzer", layout="wide")
@@ -266,6 +268,34 @@ if show_plots:
 
     st.plotly_chart(fig_dist, use_container_width=True)
 
+    st.subheader("Quality summary (no ground truth)")
+
+    # Only compute for this method for now
+    # If you add more methods, we can route to the right summary function via registry.
+    try:
+        q = quality_summary_gps_gate(result, params)
+    except Exception as e:
+        st.warning(f"Quality summary failed: {e}")
+        q = None
+
+    if q:
+        # Top KPIs
+        a, b, c, d = st.columns(4)
+        a.metric("Laps detected", q.get("laps_detected"))
+        b.metric("Lap time CV", f"{q.get('lap_time_cv'):.3f}" if np.isfinite(q.get("lap_time_cv", np.nan)) else "—")
+        c.metric("Shape corr (mean)", f"{q.get('shape_corr_mean'):.3f}" if np.isfinite(q.get("shape_corr_mean", np.nan)) else "—")
+        d.metric("Boundary spread (m)", f"{q.get('boundary_spread_m'):.1f}" if np.isfinite(q.get("boundary_spread_m", np.nan)) else "—")
+
+        # Detail table
+        dfq = pd.DataFrame([q]).T.reset_index()
+        dfq.columns = ["metric", "value"]
+        st.dataframe(dfq, use_container_width=True)
+
+        # Friendly interpretation
+        st.caption(
+            "Interpretation: lower lap-time CV, lower boundary spread, and lower stability shifts are better. "
+            "Higher shape correlation and higher fast-fraction are better."
+        )
 
 #These plots are from the previous person using pyplot.
 
