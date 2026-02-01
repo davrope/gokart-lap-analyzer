@@ -40,6 +40,7 @@ try:
     result = add_lap_distance_metrics(result)
 
 except Exception as e:
+    st.exception(e)
     st.error(f"Failed to analyze file: {e}")
     st.stop()
 
