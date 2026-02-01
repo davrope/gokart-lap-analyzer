@@ -7,7 +7,7 @@ import pandas as pd
 from lap_methods import get_methods, default_params, params_to_dict
 from lap_methods.ui import render_params_form
 from lap_methods.quality import quality_summary_gps_gate
-from viz.plots import make_plots
+from viz.plots import make_plots, animate_track_points
 from lap_methods.metrics import add_lap_distance_metrics
 
 st.set_page_config(page_title="FIT Lap Analyzer", layout="wide")
@@ -90,7 +90,10 @@ else:
         index=0,
         key="track_view"
     )
-
+    animate = st.sidebar.checkbox(
+    "Animate GPS points",
+    value=False
+    )
     if show_plots:
         st.subheader("Plots")
 
@@ -134,4 +137,17 @@ else:
             "Interpretation: lower lap-time CV, lower boundary spread, and lower stability shifts are better. "
             "Higher shape correlation and higher fast-fraction are better."
         )
+    if animate:
+        fig_anim = animate_track_points(
+            gps,
+            track_view=track_view,
+            fps=20,
+            max_frames=450,    # keep it responsive
+            tail_points=250,   # tail length
+        )
+        st.plotly_chart(fig_anim, use_container_width=True, key="fig_anim")
 
+        st.plotly_chart(fig_dist, use_container_width=True, key="fig_dist")
+        # st.plotly_chart(fig_timeline, use_container_width=True, key="fig_timeline")
+        # st.plotly_chart(fig_step, use_container_width=True, key="fig_step")
+        # st.plotly_chart(fig_distdomain, use_container_width=True, key="fig_distdomain")

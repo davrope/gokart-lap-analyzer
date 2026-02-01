@@ -580,3 +580,248 @@ def plot_laps_through_distance(gps: pd.DataFrame, pass_idx, laps: pd.DataFrame |
         legend=dict(orientation="h"),
     )
     return fig
+
+
+
+def animate_track_points(
+    gps: pd.DataFrame,
+    *,
+    track_view: str = "Cartesian (fast)",
+    fps: int = 5,
+    max_frames: int = 400,
+    tail_points: int = 200,
+    marker_size: int = 10,
+) -> go.Figure:
+    """
+    Animated 'moving point' over the track.
+    - fps/max_frames control smoothness vs speed
+    - tail_points controls how many recent points are shown as a trail
+    """
+    df = gps.copy()
+
+    # Ensure time sorted
+    if "timestamp" in df.columns:
+        df = df.sort_values("timestamp")
+    df = df.reset_index(drop=True)
+
+    n = len(df)
+    if n < 2:
+        fig = go.Figure()
+        fig.update_layout(
+            # Give bottom margin so controls fit
+            margin=dict(l=20, r=20, t=60, b=110),
+
+            updatemenus=[
+                dict(
+                    type="buttons",
+                    direction="left",           # horizontal
+                    showactive=True,
+                    x=0.0,                      # left aligned
+                    y=-0.12,                    # below plot area
+                    xanchor="left",
+                    yanchor="top",
+                    pad=dict(r=10, t=0),
+                    buttons=[
+                        dict(
+                            label="▶ Play",
+                            method="animate",
+                            args=[None, dict(
+                                frame=dict(duration=duration_ms, redraw=True),
+                                transition=dict(duration=0),
+                                fromcurrent=True,
+                                mode="immediate",
+                            )],
+                        ),
+                        dict(
+                            label="⏸ Pause",
+                            method="animate",
+                            args=[[None], dict(
+                                frame=dict(duration=0, redraw=False),
+                                mode="immediate",
+                                transition=dict(duration=0),
+                            )],
+                        ),
+                    ],
+                )
+            ],
+
+            sliders=[
+                dict(
+                    x=0.0,
+                    y=-0.05,                    # just under buttons
+                    len=1.0,
+                    xanchor="left",
+                    yanchor="top",
+                    currentvalue=dict(prefix="Frame: ", font=dict(size=12)),
+                    pad=dict(t=5, b=0),
+                    steps=[
+                        dict(
+                            method="animate",
+                            args=[[str(k)], dict(
+                                mode="immediate",
+                                frame=dict(duration=0, redraw=True),
+                                transition=dict(duration=0),
+                            )],
+                            label=str(k),
+                        )
+                        for k in range(len(frames))
+                    ],
+                )
+            ],
+        )
+
+        return fig
+
+    # Downsample indices to keep animation snappy
+    # Example: cap frames to ~max_frames by stepping
+    step = max(1, int(np.ceil(n / max_frames)))
+    frame_idx = np.arange(0, n, step)
+    if frame_idx[-1] != n - 1:
+        frame_idx = np.append(frame_idx, n - 1)
+
+    # Base "full track" for context
+    if track_view == "Map background":
+        base_trace = go.Scattermapbox(
+            lat=df["lat"], lon=df["lon"],
+            mode="lines",
+            name="Track",
+            hoverinfo="skip",
+            line=dict(width=3),
+        )
+        head_trace = go.Scattermapbox(
+            lat=[df.loc[0, "lat"]], lon=[df.loc[0, "lon"]],
+            mode="markers",
+            name="Current",
+            marker=dict(size=marker_size),
+        )
+        tail_trace = go.Scattermapbox(
+            lat=df.loc[:0, "lat"], lon=df.loc[:0, "lon"],
+            mode="lines",
+            name="Tail",
+            line=dict(width=5),
+            hoverinfo="skip",
+        )
+    else:
+        base_trace = go.Scatter(
+            x=df["lon"], y=df["lat"],
+            mode="lines",
+            name="Track",
+            hoverinfo="skip",
+            line=dict(width=2),
+        )
+        head_trace = go.Scatter(
+            x=[df.loc[0, "lon"]], y=[df.loc[0, "lat"]],
+            mode="markers",
+            name="Current",
+            marker=dict(size=marker_size),
+        )
+        tail_trace = go.Scatter(
+            x=df.loc[:0, "lon"], y=df.loc[:0, "lat"],
+            mode="lines",
+            name="Tail",
+            line=dict(width=4),
+            hoverinfo="skip",
+        )
+
+    fig = go.Figure(data=[base_trace, tail_trace, head_trace])
+
+    # Build frames
+    frames = []
+    for k, i in enumerate(frame_idx):
+        j0 = max(0, i - tail_points)
+
+        if track_view == "Map background":
+            tail = dict(lat=df.loc[j0:i, "lat"], lon=df.loc[j0:i, "lon"])
+            head = dict(lat=[df.loc[i, "lat"]], lon=[df.loc[i, "lon"]])
+        else:
+            tail = dict(x=df.loc[j0:i, "lon"], y=df.loc[j0:i, "lat"])
+            head = dict(x=[df.loc[i, "lon"]], y=[df.loc[i, "lat"]])
+
+        # traces order: [base, tail, head]
+        frames.append(go.Frame(
+            name=str(k),
+            data=[
+                {},  # base unchanged
+                tail,
+                head,
+            ],
+            layout=go.Layout(
+                title=f"Track animation — point {i+1}/{n}"
+            )
+        ))
+
+    fig.frames = frames
+
+    # Controls
+    duration_ms = int(1000 / max(1, fps))
+    fig.update_layout(
+        height=600,
+        margin=dict(l=20, r=20, t=60, b=20),
+        legend=dict(orientation="h"),
+        updatemenus=[
+            dict(
+                type="buttons",
+                showactive=False,
+                x=0.0,
+                y=1.15,
+                xanchor="left",
+                yanchor="top",
+                buttons=[
+                    dict(
+                        label="Play",
+                        method="animate",
+                        args=[None, dict(
+                            frame=dict(duration=duration_ms, redraw=True),
+                            transition=dict(duration=0),
+                            fromcurrent=True,
+                            mode="immediate"
+                        )]
+                    ),
+                    dict(
+                        label="Pause",
+                        method="animate",
+                        args=[[None], dict(
+                            frame=dict(duration=0, redraw=False),
+                            mode="immediate",
+                            transition=dict(duration=0),
+                        )]
+                    ),
+                ],
+            )
+        ],
+        sliders=[
+            dict(
+                x=0.0, y=1.05,
+                len=1.0,
+                currentvalue=dict(prefix="Frame: "),
+                steps=[
+                    dict(method="animate",
+                         args=[[str(k)], dict(mode="immediate",
+                                              frame=dict(duration=0, redraw=True),
+                                              transition=dict(duration=0))],
+                         label=str(k))
+                    for k in range(len(frames))
+                ],
+            )
+        ],
+    )
+
+    # Map settings (only if needed)
+    if track_view == "Map background":
+        fig.update_layout(mapbox=dict(style="open-street-map"))
+        # Optional: auto center/zoom-ish
+        fig.update_layout(
+            mapbox_center=dict(
+                lat=float(df["lat"].median()),
+                lon=float(df["lon"].median()),
+            ),
+            mapbox_zoom=16,
+        )
+    else:
+        fig.update_layout(
+            xaxis_title="Longitude",
+            yaxis_title="Latitude",
+            yaxis_scaleanchor="x",
+        )
+
+    return fig
