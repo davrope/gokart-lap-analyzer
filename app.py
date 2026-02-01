@@ -2,13 +2,17 @@ import streamlit as st
 import numpy as np
 import plotly.graph_objects as go
 import pandas as pd
-
+from streamlit_plotly_events import plotly_events
 
 from lap_methods import get_methods, default_params, params_to_dict
 from lap_methods.ui import render_params_form
 from lap_methods.quality import quality_summary_gps_gate
-from viz.plots import make_plots, animate_track_points
+from viz.plots import make_plots, animate_track_points, make_clickable_track_fig, add_gate_marker
 from lap_methods.metrics import add_lap_distance_metrics
+
+
+from lap_methods.gps_gate import detect_passes_by_minima, passes_to_laps, summarize_laps, tag_samples
+
 
 st.set_page_config(page_title="FIT Lap Analyzer", layout="wide")
 st.title("FIT Lap Analyzer")
@@ -32,6 +36,7 @@ if uploaded is None:
     st.stop()
 
 fit_bytes = uploaded.getvalue()
+
 
 runner = methods[method_name]["runner"]
 
@@ -82,6 +87,33 @@ else:
         file_name="samples_with_laps_gps.csv",
         mime="text/csv",
     )
+    
+    # #session state to define center gate by user
+    # if "gate_center" not in st.session_state:
+    #     st.session_state["gate_center"] = None
+    # st.header("Gate selection")
+    # fig_click = make_clickable_track_fig(gps)
+
+    # clicked = plotly_events(
+    #     fig_click,
+    #     click_event=True,
+    #     hover_event=False,
+    #     select_event=False,
+    #     key="gate_click_plot",
+    # )
+
+    # if clicked:
+    #     lon = float(clicked[0]["x"])
+    #     lat = float(clicked[0]["y"])
+    #     st.session_state["gate_center"] = (lat, lon)
+    #     st.toast(f"Gate center set: {lat:.6f}, {lon:.6f}", icon="🎯")
+
+    # # Preview selected gate
+    # if st.session_state["gate_center"]:
+    #     st.subheader("Gate preview")
+    #     fig_preview = make_clickable_track_fig(gps)
+    #     fig_preview = add_gate_marker(fig_preview, st.session_state["gate_center"])
+    #     st.plotly_chart(fig_preview, use_container_width=True, key="gate_preview")
 
     #PLOT using the plots module
     track_view = st.sidebar.radio(
@@ -148,6 +180,3 @@ else:
         st.plotly_chart(fig_anim, use_container_width=True, key="fig_anim")
 
         st.plotly_chart(fig_dist, use_container_width=True, key="fig_dist")
-        # st.plotly_chart(fig_timeline, use_container_width=True, key="fig_timeline")
-        # st.plotly_chart(fig_step, use_container_width=True, key="fig_step")
-        # st.plotly_chart(fig_distdomain, use_container_width=True, key="fig_distdomain")
