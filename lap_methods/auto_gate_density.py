@@ -27,7 +27,8 @@ class AutoGateDensityParams:
     # Grid resolution for density/track-space
     cell_size_m: float = field(default=6.0, metadata={"min": 2.0, "max": 20.0, "step": 1.0})
     # Density thresholding (auto picks a percentile of cell counts)
-    cell_count_percentile: float = field(default=80.0, metadata={"min": 50.0, "max": 98.0, "step": 1.0})
+    cell_count_percentile: float = field(default=65.0, metadata={"min": 50.0, "max": 98.0, "step": 1.0})
+
 
     # Track-speed auto: percentiles over track points
     speed_gate_percentile: float = field(default=70.0, metadata={"min": 40.0, "max": 95.0, "step": 1.0})
@@ -136,15 +137,29 @@ def track_space_mask(gps: pd.DataFrame, p: AutoGateDensityParams) -> np.ndarray:
 
 def auto_gate_from_density(gps: pd.DataFrame, track_mask: np.ndarray, p: AutoGateDensityParams) -> Tuple[float, float]:
     """
-    Gate = densest cell within track_mask.
+    Gate = densest cell within track_mask, but computed on FAST track points, then snapped to nearest fast-track point.
+    This prevents the gate from landing inside the loop.
     """
-    g = gps.loc[track_mask].copy()
-    if len(g) < 30:
-        # fallback
+    g_track = gps.loc[track_mask].copy()
+    if len(g_track) < 30:
         return (float(np.nanmedian(gps["lat"])), float(np.nanmedian(gps["lon"])))
 
-    lat = g["lat"].to_numpy(dtype=float)
-    lon = g["lon"].to_numpy(dtype=float)
+    # --- Use a conservative "fast" threshold for gate search ---
+    spd = g_track["speed_kmh"].to_numpy(dtype=float)
+    spd = spd[np.isfinite(spd)]
+    if len(spd) == 0:
+        speed_thr = float(p.speed_min_floor)
+    else:
+        # Less aggressive than p.speed_gate_percentile; this is specifically for gate placement stability
+        speed_thr = float(max(p.speed_min_floor, np.percentile(spd, 50.0)))  # median speed on track
+
+    g_fast = g_track[g_track["speed_kmh"] >= speed_thr].copy()
+    if len(g_fast) < 30:
+        g_fast = g_track  # fallback if too few fast points
+
+    lat = g_fast["lat"].to_numpy(dtype=float)
+    lon = g_fast["lon"].to_numpy(dtype=float)
+
     x, y, *_ = _to_xy_m(lat, lon)
     gx, gy = _grid_bins(x, y, p.cell_size_m)
 
@@ -153,7 +168,21 @@ def auto_gate_from_density(gps: pd.DataFrame, track_mask: np.ndarray, p: AutoGat
     best = uniq[np.argmax(counts)]
 
     m = key == best
-    return (float(np.nanmedian(lat[m])), float(np.nanmedian(lon[m])))
+    gate_lat = float(np.nanmedian(lat[m]))
+    gate_lon = float(np.nanmedian(lon[m]))
+
+    # --- SNAP: force gate to lie on the driven path (nearest fast-track point) ---
+    d_snap = haversine_m(
+        g_fast["lat"].to_numpy(dtype=float),
+        g_fast["lon"].to_numpy(dtype=float),
+        gate_lat, gate_lon,
+    )
+    j = int(np.nanargmin(d_snap))
+    gate_lat = float(g_fast.iloc[j]["lat"])
+    gate_lon = float(g_fast.iloc[j]["lon"])
+
+    return gate_lat, gate_lon
+
 
 
 def auto_speed_for_gate(gps: pd.DataFrame, track_mask: np.ndarray, p: AutoGateDensityParams) -> float:
@@ -164,51 +193,31 @@ def auto_speed_for_gate(gps: pd.DataFrame, track_mask: np.ndarray, p: AutoGateDe
     return float(max(p.speed_min_floor, np.percentile(spd, float(p.speed_gate_percentile))))
 
 
-def auto_near_m(gps: pd.DataFrame, gate_lat: float, gate_lon: float, track_mask: np.ndarray, speed_for_gate: float, p: AutoGateDensityParams) -> float:
+def auto_near_m(gps: pd.DataFrame, gate_lat: float, gate_lon: float,
+                track_mask: np.ndarray, speed_for_gate: float, p: AutoGateDensityParams) -> float:
     g = gps.loc[track_mask].copy()
-    # focus on "fast" track points to avoid pit approach
-    g = g[g["speed_kmh"] >= float(speed_for_gate)]
-    if len(g) < 30:
-        g = gps.loc[track_mask].copy()
 
-    d = haversine_m(g["lat"].to_numpy(dtype=float), g["lon"].to_numpy(dtype=float), gate_lat, gate_lon)
+    # Prefer fast points to avoid pit/exit distortions
+    gf = g[g["speed_kmh"] >= float(speed_for_gate)].copy()
+    if len(gf) < 30:
+        gf = g
+
+    d = haversine_m(gf["lat"].to_numpy(dtype=float), gf["lon"].to_numpy(dtype=float), gate_lat, gate_lon)
+    d = np.asarray(d, dtype=float)
     d = d[np.isfinite(d)]
-    if len(d) == 0:
-        return float(np.mean(p.near_bounds_m))
+    if len(d) < 20:
+        return 25.0
 
-    base = float(np.quantile(d, float(p.near_quantile)))
-    near = float(base * float(p.near_scale))
-    bounds = getattr(p, "near_bounds_m", (10.0, 60.0))
+    # Use minima-like distances: take a low quantile as "closest approach"
+    base = float(np.quantile(d, 0.02))  # ~closest approaches
+    # near_m should be a bit larger than closest approach, to absorb GPS noise
+    near = float(max(base * 3.0, base + 8.0))
 
-    # Robust parsing in case Streamlit widgets changed the type/shape
-    if isinstance(bounds, str):
-        # Accept "10,60" or "10 60"
-        parts = [x for x in bounds.replace(",", " ").split() if x.strip()]
-        vals = []
-        for s in parts:
-            try:
-                vals.append(float(s))
-            except Exception:
-                pass
-        if len(vals) >= 2:
-            lo, hi = vals[0], vals[1]
-        else:
-            lo, hi = 10.0, 60.0
-    else:
-        try:
-            b = list(bounds)
-            if len(b) >= 2:
-                lo, hi = float(b[0]), float(b[1])
-            else:
-                lo, hi = 10.0, 60.0
-        except Exception:
-            lo, hi = 10.0, 60.0
-
-    # Ensure ordering
-    if hi < lo:
-        lo, hi = hi, lo
-
+    # Clamp
+    lo, hi = 10.0, 60.0
+    # (or use p.near_bounds_m if you changed it to two separate fields)
     return float(np.clip(near, lo, hi))
+
 
 
 
