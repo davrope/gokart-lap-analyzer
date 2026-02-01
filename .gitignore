@@ -1,0 +1,16 @@
+*.fit
+# Python
+__pycache__/
+*.pyc
+
+# Virtual environment
+.venv/
+
+# OS
+.DS_Store
+
+# Streamlit
+.streamlit/
+
+# Data / exports
+*.csv
