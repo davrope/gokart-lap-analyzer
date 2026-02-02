@@ -87,33 +87,6 @@ else:
         mime="text/csv",
     )
     
-    # #session state to define center gate by user
-    # if "gate_center" not in st.session_state:
-    #     st.session_state["gate_center"] = None
-    # st.header("Gate selection")
-    # fig_click = make_clickable_track_fig(gps)
-
-    # clicked = plotly_events(
-    #     fig_click,
-    #     click_event=True,
-    #     hover_event=False,
-    #     select_event=False,
-    #     key="gate_click_plot",
-    # )
-
-    # if clicked:
-    #     lon = float(clicked[0]["x"])
-    #     lat = float(clicked[0]["y"])
-    #     st.session_state["gate_center"] = (lat, lon)
-    #     st.toast(f"Gate center set: {lat:.6f}, {lon:.6f}", icon="🎯")
-
-    # # Preview selected gate
-    # if st.session_state["gate_center"]:
-    #     st.subheader("Gate preview")
-    #     fig_preview = make_clickable_track_fig(gps)
-    #     fig_preview = add_gate_marker(fig_preview, st.session_state["gate_center"])
-    #     st.plotly_chart(fig_preview, use_container_width=True, key="gate_preview")
-
     #PLOT using the plots module
     track_view = st.sidebar.radio(
         "Track view",

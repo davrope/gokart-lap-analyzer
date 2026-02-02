@@ -75,11 +75,12 @@ def fit_to_gps_speed_df_from_bytes(fit_bytes: bytes) -> pd.DataFrame:
     if alt_col:
         df["elev_m"] = pd.to_numeric(df[alt_col], errors="coerce")
 
-    keep = ["timestamp", "lat", "lon", "speed_kmh"]
-    if "heart_rate" in df.columns: keep.append("heart_rate")
-    if "elev_m" in df.columns: keep.append("elev_m")
+    #keep = ["timestamp", "lat", "lon", "speed_kmh"]
+    # if "heart_rate" in df.columns: keep.append("heart_rate")
+    # if "elev_m" in df.columns: keep.append("elev_m")
 
-    return df[keep].dropna(subset=["lat", "lon"]).reset_index(drop=True)
+    # return df[keep].dropna(subset=["lat", "lon"]).reset_index(drop=True)
+    return df.dropna(subset=["lat", "lon"]).reset_index(drop=True)
 
 
 def find_gate_center_from_fast_points(
