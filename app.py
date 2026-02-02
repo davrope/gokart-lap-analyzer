@@ -7,11 +7,10 @@ from streamlit_plotly_events import plotly_events
 from lap_methods import get_methods, default_params, params_to_dict
 from lap_methods.ui import render_params_form
 from lap_methods.quality import quality_summary_gps_gate
-from viz.plots import make_plots, animate_track_points, make_clickable_track_fig, add_gate_marker
+from viz.plots import make_plots, animate_track_points
 from lap_methods.metrics import add_lap_distance_metrics
 
 
-from lap_methods.gps_gate import detect_passes_by_minima, passes_to_laps, summarize_laps, tag_samples
 
 
 st.set_page_config(page_title="FIT Lap Analyzer", layout="wide")
