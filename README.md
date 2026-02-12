@@ -44,3 +44,13 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 streamlit run app.py
+```
+
+## Testing
+Run automated tests:
+```bash
+export FIT_TEST_FILE="/absolute/path/to/your-session.fit"
+.venv/bin/python -m unittest discover -s tests -v
+```
+
+Detailed methodology and manual smoke checks are in `TESTING.md`.
