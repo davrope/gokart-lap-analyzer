@@ -11,6 +11,15 @@ from viz.plots import make_plots, animate_track_points
 from lap_methods.metrics import add_lap_distance_metrics
 
 
+FURTHER_ANALYSIS_PAGE = "pages/1_Further_Analysis.py"
+
+
+def _go_to_further_analysis_page() -> None:
+    try:
+        st.switch_page(FURTHER_ANALYSIS_PAGE)
+    except Exception:
+        st.info("Open the 'Further Analysis' page from the sidebar pages menu.")
+
 
 
 st.set_page_config(page_title="FIT Lap Analyzer", layout="wide")
@@ -58,6 +67,12 @@ dt_s = result["dt_s"]
 laps = result["laps"]
 lap_metrics = result["lap_metrics"]
 samples = result["samples"]
+
+st.session_state["latest_analysis"] = {
+    "method_name": method_name,
+    "params": params_to_dict(params),
+    "result": result,
+}
 
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("GPS points", f"{len(gps)}")
@@ -152,3 +167,10 @@ else:
         st.plotly_chart(fig_anim, use_container_width=True, key="fig_anim")
 
         st.plotly_chart(fig_dist, use_container_width=True, key="fig_dist")
+
+st.divider()
+st.subheader("Further analysis")
+st.caption("Open a dedicated page for curve-level analysis, speed breakdowns, and coaching recommendations.")
+
+if st.button("Open further analysis", type="primary", use_container_width=True):
+    _go_to_further_analysis_page()
