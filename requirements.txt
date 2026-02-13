@@ -4,3 +4,7 @@ pandas
 numpy
 matplotlib
 scipy
+plotly
+streamlit-plotly-events
+supabase
+python-dotenv

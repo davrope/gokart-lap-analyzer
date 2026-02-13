@@ -1,64 +1,62 @@
 # Testing Methodology
 
-This project should be tested at three levels before adding new features.
+This project now has two testing layers:
+- telemetry/analysis contract testing
+- platform workflow testing (auth, repositories, persistence payloads)
 
-## 1) Fast contract tests (every change)
+## 1) Fast automated tests (every change)
 
-Goal: catch breakages in core data contracts quickly.
-
-What we validate:
-- `gps_gate.run(...)` returns the expected keys and coherent shapes.
-- Distance metrics are added correctly (`lap_distance_m`, `lap_distance_km`).
-- Further-analysis service returns stable schemas and non-empty recommendations.
-
-Command:
+Run all tests:
 
 ```bash
 export FIT_TEST_FILE="/absolute/path/to/your-session.fit"
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
-Notes:
-- `FIT_TEST_FILE` is required and should point to a local `.fit` file not tracked in git.
-- This avoids leaking activity file names in repository code/history.
+### FIT-based tests
+- `tests/test_pipeline_with_fit.py`
+- Validates GPS gate output contract, distance metrics, and further-analysis contract.
+- Requires `FIT_TEST_FILE` to avoid hardcoded FIT names in source.
 
-## 2) Streamlit smoke test (before merge/release)
+### Platform tests (no external services)
+- `tests/test_auth_service.py`: auth flow behavior with mocks.
+- `tests/test_repositories.py`: repository interface behavior with fake query chains.
+- `tests/test_analysis_persistence.py`: payload mapping from analysis outputs to DB rows.
 
-Goal: ensure UI flow still works with real data.
+## 2) Manual smoke tests (before release)
 
-Steps:
-1. Run app:
-   ```bash
-   .venv/bin/streamlit run app.py
-   ```
-2. Upload your local `.fit` file (not tracked in git).
-3. Confirm main page renders:
-   - summary metrics
-   - lap table and downloads
-   - plots (if enabled)
-4. Click `Open further analysis`.
-5. Confirm further page renders:
-   - lap KPIs and speed chart
-   - lap overview table
-   - recommendations list
-6. Click `Back to main page`.
+## A. Auth + landing
+1. Start app: `streamlit run app.py`
+2. Confirm landing page renders.
+3. Request magic link and verify login callback works.
 
-Acceptance criteria:
-- No exceptions in terminal/UI.
-- Navigation works both ways.
-- Tables and charts are populated when laps exist.
+## B. Upload workflow
+1. Open `Upload Attempt` page.
+2. Create a new track.
+3. Upload a `.fit` file and process.
+4. Confirm attempt is saved and marked processed.
 
-## 3) Regression checks for future curve analytics
+## C. Attempt analysis
+1. Open `Attempt Analysis` page.
+2. Select track + attempt.
+3. Verify both tabs render:
+   - `Overview`
+   - `Advanced`
+4. Confirm no errors in plots and tables.
 
-When curve detection is added, extend tests to include:
-- Per-curve schema contract (required columns and dtypes).
-- At least one deterministic benchmark:
-  - same FIT file
-  - expected curve count in a reasonable range
-  - stable aggregate metrics (e.g., mean apex speed tolerance band)
-- Recommendation rules tied to measurable conditions.
+## D. Track history
+1. Open `Track History` page.
+2. Confirm timeline chart appears.
+3. Confirm consistency trend appears.
+4. Confirm heatmap and latest-vs-best comparisons render.
 
-Guideline:
-- Prefer range-based assertions over exact floating-point equality.
-- Keep one realistic FIT file in repo for repeatable checks.
-- Run Level 1 tests before every commit that changes `lap_methods/`, `analysis/`, `pages/`, or `app.py`.
+## E. Security / data isolation
+1. Login as user A and create track/attempt.
+2. Login as user B.
+3. Confirm user B cannot view user A records.
+
+## Acceptance criteria
+- Existing single-attempt analytics still produce stable outputs.
+- Multi-attempt persistence works end-to-end.
+- Historical dashboards are populated from saved attempt data.
+- No cross-user data leakage with RLS.

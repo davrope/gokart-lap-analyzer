@@ -93,3 +93,40 @@ def generate_insight_summary(
 ) -> InsightSummary:
     provider = provider or HeuristicInsightProvider()
     return provider.summarize(analysis)
+
+
+def generate_track_history_summary(
+    track_metrics: dict,
+    provider: InsightProvider | None = None,
+) -> InsightSummary:
+    """
+    Placeholder entrypoint for future LLM-powered historical coaching summaries.
+
+    For now, this function derives a concise heuristic summary from aggregate
+    track metrics while preserving a stable callable interface.
+    """
+    _ = provider  # reserved for future use with model-backed providers
+    bullets: list[str] = []
+    opportunities: list[str] = []
+
+    attempts = int(track_metrics.get("attempts_count", 0) or 0)
+    curves = int(track_metrics.get("curves_count", 0) or 0)
+    best_lap_delta = track_metrics.get("latest_vs_best_delta_s")
+
+    bullets.append(f"Attempts analyzed: {attempts}.")
+    bullets.append(f"Curves tracked: {curves}.")
+
+    if isinstance(best_lap_delta, (int, float)) and np.isfinite(float(best_lap_delta)):
+        if best_lap_delta <= 0:
+            opportunities.append("Latest attempt matched or improved personal best lap pace.")
+        else:
+            opportunities.append(f"Latest attempt is +{float(best_lap_delta):.2f}s vs personal best lap.")
+    else:
+        opportunities.append("Insufficient attempt data to compare latest run against personal best.")
+
+    return InsightSummary(
+        title="Track History Coaching Snapshot",
+        bullets=bullets,
+        opportunities=opportunities,
+        engine="heuristic-local",
+    )

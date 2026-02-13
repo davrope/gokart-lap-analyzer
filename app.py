@@ -1,176 +1,144 @@
-import streamlit as st
+from __future__ import annotations
+
 import numpy as np
-import plotly.graph_objects as go
-import pandas as pd
-from streamlit_plotly_events import plotly_events
+import streamlit as st
 
-from lap_methods import get_methods, default_params, params_to_dict
-from lap_methods.ui import render_params_form
-from lap_methods.quality import quality_summary_gps_gate
-from viz.plots import make_plots, animate_track_points
-from lap_methods.metrics import add_lap_distance_metrics
-
-
-FURTHER_ANALYSIS_PAGE = "pages/1_Further_Analysis.py"
-
-
-def _go_to_further_analysis_page() -> None:
-    try:
-        st.switch_page(FURTHER_ANALYSIS_PAGE)
-    except Exception:
-        st.info("Open the 'Further Analysis' page from the sidebar pages menu.")
-
-
-
-st.set_page_config(page_title="FIT Lap Analyzer", layout="wide")
-st.title("FIT Lap Analyzer")
-
-methods = get_methods()
-method_name = st.sidebar.selectbox(
-    "Lap detection method",
-    list(methods.keys()),
-    key="method_selector"
+from services import (
+    bootstrap_auth_session_from_query,
+    get_app_config,
+    get_attempt_repository,
+    get_authenticated_user,
+    get_auth_service,
+    get_track_repository,
+    sign_out_user,
+    supabase_configured,
 )
 
-params = default_params(method_name)
 
-params = render_params_form(params, title="Method parameters", key_prefix=method_name)
-show_plots = st.sidebar.checkbox("Show plots", value=True, key=f"{method_name}.show_plots")
+UPLOAD_PAGE = "pages/1_Upload_Attempt.py"
+ATTEMPT_PAGE = "pages/2_Attempt_Analysis.py"
+HISTORY_PAGE = "pages/3_Track_History.py"
+FURTHER_PAGE = "pages/4_Further_Analysis.py"
 
 
-uploaded = st.file_uploader("Upload a Garmin .FIT file", type=["fit"])
-if uploaded is None:
-    st.info("Upload a .fit file to begin.")
+def _go(page: str) -> None:
+    try:
+        st.switch_page(page)
+    except Exception:
+        st.info("Use the sidebar pages menu to navigate.")
+
+
+st.set_page_config(page_title="GoKart Coaching Platform", layout="wide")
+
+cfg = get_app_config()
+if not cfg.multi_attempt_mode:
+    st.title("GoKart Coaching Platform")
+    st.info("`MULTI_ATTEMPT_MODE` is disabled. Enable it in Streamlit secrets or environment to use this workflow.")
     st.stop()
 
-fit_bytes = uploaded.getvalue()
+st.title("GoKart Coaching Platform")
 
+status_msg = bootstrap_auth_session_from_query()
+if status_msg:
+    st.success(status_msg)
 
-runner = methods[method_name]["runner"]
+if not supabase_configured(cfg):
+    st.error(
+        "Supabase is not configured. Add `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `APP_BASE_URL` in Streamlit secrets."
+    )
+    st.code(
+        """
+SUPABASE_URL="https://<project>.supabase.co"
+SUPABASE_ANON_KEY="<anon-key>"
+APP_BASE_URL="https://<your-streamlit-app-url>"
+MULTI_ATTEMPT_MODE="true"
+""".strip()
+    )
+    st.stop()
+
+st.markdown(
+    """
+<div style="padding:1rem 1rem 0.5rem 1rem;border:1px solid #e5e7eb;border-radius:16px;background:linear-gradient(140deg,#f8fafc,#eef2ff);">
+  <h3 style="margin-top:0;">Analyze, Compare, Improve</h3>
+  <p style="margin-bottom:0.6rem;">Upload multiple Garmin FIT attempts per track, visualize lap and curve behavior over time, and track performance improvements with structured coaching insights.</p>
+</div>
+""",
+    unsafe_allow_html=True,
+)
+
+user = get_authenticated_user()
+
+if user is None:
+    st.subheader("Login")
+    st.caption("Passwordless login with Supabase Magic Link")
+
+    with st.form("login_form"):
+        email = st.text_input("Email", placeholder="driver@example.com")
+        submitted = st.form_submit_button("Send magic link", type="primary")
+
+    if submitted:
+        try:
+            get_auth_service().send_magic_link(email)
+            st.success("Magic link sent. Check your email and return to this page.")
+        except Exception as exc:
+            st.error(f"Failed to send magic link: {exc}")
+
+    st.stop()
+
+st.success(f"Logged in as {user.email or user.id}")
+
+row1, row2 = st.columns([3, 1])
+with row2:
+    if st.button("Sign out", use_container_width=True):
+        sign_out_user()
+        st.rerun()
+
+tracks_count = 0
+attempts_count = 0
+best_lap_s = np.nan
 
 try:
-    result = runner(fit_bytes, params)
-    result = add_lap_distance_metrics(result)
+    track_repo = get_track_repository()
+    attempt_repo = get_attempt_repository()
 
-except Exception as e:
-    st.exception(e)
-    st.error(f"Failed to analyze file: {e}")
-    st.stop()
+    tracks = track_repo.list_tracks(user.id)
+    attempts = attempt_repo.list_attempts(user.id)
 
-gps = result["gps"]
-fast_pts = result["fast_pts"]
-gate_lat = result["gate_lat"]
-gate_lon = result["gate_lon"]
-dist = result["dist"]
-pass_idx = result["pass_idx"]
-dt_s = result["dt_s"]
-laps = result["laps"]
-lap_metrics = result["lap_metrics"]
-samples = result["samples"]
+    tracks_count = len(tracks)
+    attempts_count = len(attempts)
 
-st.session_state["latest_analysis"] = {
-    "method_name": method_name,
-    "params": params_to_dict(params),
-    "result": result,
-}
+    vals = [float(a.get("best_lap_s")) for a in attempts if a.get("best_lap_s") is not None]
+    vals = [v for v in vals if np.isfinite(v)]
+    if vals:
+        best_lap_s = min(vals)
+except Exception as exc:
+    st.warning(f"Could not load dashboard stats: {exc}")
 
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("GPS points", f"{len(gps)}")
-c2.metric("Sampling interval (approx)", f"{dt_s:.2f}s")
-c3.metric("Detected passes", f"{len(pass_idx)}")
-c4.metric("Detected laps", f"{len(laps)}")
+c1, c2, c3 = st.columns(3)
+c1.metric("Tracks", f"{tracks_count}")
+c2.metric("Attempts", f"{attempts_count}")
+c3.metric("Personal best lap", f"{best_lap_s:.2f}s" if np.isfinite(best_lap_s) else "—")
 
-st.write(f"**Gate center:** lat `{gate_lat:.6f}`, lon `{gate_lon:.6f}`")
-st.caption(f"Method: {method_name} • Params: {params_to_dict(params)}")
+st.subheader("Workflow")
 
-if laps.empty:
-    st.warning("No laps detected. Try increasing 'Gate proximity' or lowering 'Min lap time'.")
-else:
-    st.subheader("Lap metrics")
-    st.dataframe(lap_metrics.sort_values("lap"), use_container_width=True)
+w1, w2, w3 = st.columns(3)
+with w1:
+    st.markdown("**1) Upload Attempt**")
+    st.caption("Upload FIT file and attach it to a track.")
+    if st.button("Go to Upload", key="goto_upload", use_container_width=True, type="primary"):
+        _go(UPLOAD_PAGE)
+with w2:
+    st.markdown("**2) Attempt Analysis**")
+    st.caption("Inspect one attempt with overview + advanced telemetry.")
+    if st.button("Go to Attempt Analysis", key="goto_attempt", use_container_width=True):
+        _go(ATTEMPT_PAGE)
+with w3:
+    st.markdown("**3) Track History**")
+    st.caption("Compare attempts and monitor long-term improvements.")
+    if st.button("Go to Track History", key="goto_history", use_container_width=True):
+        _go(HISTORY_PAGE)
 
-    st.download_button(
-        "Download laps_gps.csv",
-        data=lap_metrics.to_csv(index=False).encode("utf-8"),
-        file_name="laps_gps.csv",
-        mime="text/csv",
-    )
-    st.download_button(
-        "Download samples_with_laps_gps.csv",
-        data=samples.to_csv(index=False).encode("utf-8"),
-        file_name="samples_with_laps_gps.csv",
-        mime="text/csv",
-    )
-    
-    #PLOT using the plots module
-    track_view = st.sidebar.radio(
-        "Track view",
-        ["Cartesian (fast)", "Map background"],
-        index=0,
-        key="track_view"
-    )
-    animate = st.sidebar.checkbox(
-    "Animate GPS points",
-    value=False
-    )
-    if show_plots:
-        st.subheader("Plots")
-
-        fig_track, fig_dist, fig_timeline, fig_step, fig_distdomain = make_plots(result, params, track_view=track_view)
-
-        st.plotly_chart(fig_track, use_container_width=True)
-        st.plotly_chart(fig_dist, use_container_width=True)
-        st.plotly_chart(fig_timeline, use_container_width=True)
-        st.plotly_chart(fig_step, use_container_width=True)
-        st.plotly_chart(fig_distdomain, use_container_width=True)
-
-    st.subheader("Quality summary (no ground truth)")
-
-    # Only compute for this method for now
-    # If you add more methods, we can route to the right summary function via registry.
-    try:
-        q = quality_summary_gps_gate(result, params)
-    except Exception as e:
-        st.warning(f"Quality summary failed: {e}")
-        q = None
-
-    if q:
-        # Top KPIs
-        a, b, c, d = st.columns(4)
-        a.metric("Laps detected", q.get("laps_detected"))
-        b.metric("Lap time CV", f"{q.get('lap_time_cv'):.3f}" if np.isfinite(q.get("lap_time_cv", np.nan)) else "—")
-        c.metric("Shape corr (mean)", f"{q.get('shape_corr_mean'):.3f}" if np.isfinite(q.get("shape_corr_mean", np.nan)) else "—")
-        d.metric("Boundary spread (m)", f"{q.get('boundary_spread_m'):.1f}" if np.isfinite(q.get("boundary_spread_m", np.nan)) else "—")
-
-        e, f = st.columns(2)
-        e.metric("Lap dist CV", f"{q.get('lap_dist_cv'):.3f}" if np.isfinite(q.get("lap_dist_cv", np.nan)) else "—")
-        f.metric("Lap dist MAD (m)", f"{q.get('lap_dist_mad_m'):.1f}" if np.isfinite(q.get("lap_dist_mad_m", np.nan)) else "—")
-
-        # Detail table
-        dfq = pd.DataFrame([q]).T.reset_index()
-        dfq.columns = ["metric", "value"]
-        st.dataframe(dfq, use_container_width=True)
-
-        # Friendly interpretation
-        st.caption(
-            "Interpretation: lower lap-time CV, lower boundary spread, and lower stability shifts are better. "
-            "Higher shape correlation and higher fast-fraction are better."
-        )
-    if animate:
-        fig_anim = animate_track_points(
-            gps,
-            track_view=track_view,
-            fps=20,
-            max_frames=450,    # keep it responsive
-            tail_points=250,   # tail length
-        )
-        st.plotly_chart(fig_anim, use_container_width=True, key="fig_anim")
-
-        st.plotly_chart(fig_dist, use_container_width=True, key="fig_dist")
-
-st.divider()
-st.subheader("Further analysis")
-st.caption("Open a dedicated page for curve-level analysis, speed breakdowns, and coaching recommendations.")
-
-if st.button("Open further analysis", type="primary", use_container_width=True):
-    _go_to_further_analysis_page()
+with st.expander("Advanced (single-session deep dive)"):
+    st.caption("Standalone advanced page from current session context.")
+    if st.button("Open Advanced Session Page", use_container_width=True, key="goto_further"):
+        _go(FURTHER_PAGE)
