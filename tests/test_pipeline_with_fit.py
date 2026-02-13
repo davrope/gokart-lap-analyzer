@@ -110,8 +110,20 @@ class FitPipelineTests(unittest.TestCase):
         fa = build_further_analysis(context)
         self.assertIsInstance(fa.lap_overview, pd.DataFrame)
         self.assertIsInstance(fa.curve_overview, pd.DataFrame)
+        self.assertIsInstance(fa.curve_summary, pd.DataFrame)
+        self.assertIsInstance(fa.reference_path, pd.DataFrame)
+        self.assertIsInstance(fa.samples_tagged, pd.DataFrame)
         self.assertIsInstance(fa.recommendations, list)
         self.assertGreater(len(fa.recommendations), 0)
+        self.assertIsInstance(fa.warnings, list)
+        self.assertGreaterEqual(fa.laps_detected, 0)
+        self.assertGreaterEqual(fa.valid_laps, 0)
+
+        if np.isfinite(fa.speed_threshold_kmh):
+            self.assertGreater(fa.speed_threshold_kmh, 0.0)
+
+        if not fa.samples_tagged.empty:
+            self.assertIn("speed_inlier", fa.samples_tagged.columns)
 
         expected_curve_cols = [
             "lap",
@@ -121,7 +133,11 @@ class FitPipelineTests(unittest.TestCase):
             "exit_speed_kmh",
             "time_loss_vs_best_s",
         ]
-        self.assertEqual(list(fa.curve_overview.columns), expected_curve_cols)
+        self.assertTrue(set(expected_curve_cols).issubset(set(fa.curve_overview.columns)))
+
+        if not fa.reference_path.empty:
+            expected_ref_cols = {"s_m", "lat_center", "lon_center", "lat_best", "lon_best", "curvature"}
+            self.assertTrue(expected_ref_cols.issubset(set(fa.reference_path.columns)))
 
         if not fa.lap_overview.empty and "lap_time_delta_s" in fa.lap_overview.columns:
             self.assertGreaterEqual(float(fa.lap_overview["lap_time_delta_s"].min()), 0.0)
@@ -130,6 +146,8 @@ class FitPipelineTests(unittest.TestCase):
         fa = build_further_analysis({})
         self.assertTrue(fa.lap_overview.empty)
         self.assertTrue(fa.curve_overview.empty)
+        self.assertTrue(fa.curve_summary.empty)
+        self.assertTrue(fa.reference_path.empty)
         self.assertGreater(len(fa.recommendations), 0)
 
 
