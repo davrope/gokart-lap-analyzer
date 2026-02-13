@@ -61,13 +61,20 @@ pip install -r requirements.txt
 1. Create a Supabase project.
 2. Run SQL migration in Supabase SQL editor:
    - `db/migrations/20260212_000001_multi_session.sql`
-3. Configure Streamlit secrets (or environment variables):
+3. Configure secrets/environment:
+   - Local `.env` (auto-loaded by app): copy from `.env.example`
+   - Streamlit Cloud secrets: copy from `.streamlit/secrets.toml.example`
 
 ```toml
 SUPABASE_URL = "https://<project>.supabase.co"
 SUPABASE_ANON_KEY = "<anon-key>"
 APP_BASE_URL = "https://<your-streamlit-app-url>"
 MULTI_ATTEMPT_MODE = "true"
+```
+
+```bash
+cp .env.example .env
+cp .streamlit/secrets.toml.example .streamlit/secrets.toml
 ```
 
 ## Run app

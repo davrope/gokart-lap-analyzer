@@ -1,6 +1,7 @@
 *.fit
 .env
 .env.*
+!.env.example
 # Python
 __pycache__/
 *.pyc
@@ -12,7 +13,8 @@ __pycache__/
 .DS_Store
 
 # Streamlit
-.streamlit/
+.streamlit/*
+!.streamlit/secrets.toml.example
 
 # Data / exports
 *.csv

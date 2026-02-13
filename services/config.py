@@ -4,6 +4,15 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
+try:
+    from dotenv import load_dotenv
+except Exception:
+    load_dotenv = None
+
+if load_dotenv is not None:
+    # Load local .env without overriding already-set environment variables.
+    load_dotenv(override=False)
+
 
 def _streamlit_secrets() -> dict[str, Any]:
     try:
