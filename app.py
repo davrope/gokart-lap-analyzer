@@ -25,7 +25,7 @@ def _go(page: str) -> None:
 
 def _sign_out() -> None:
     sign_out_user()
-    st.rerun()
+    _go("app.py")
 
 
 def _render_google_button(url: str) -> None:

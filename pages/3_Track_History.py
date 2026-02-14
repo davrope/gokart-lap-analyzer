@@ -20,7 +20,10 @@ from ui import configure_page, render_page_header, render_top_nav
 
 def _sign_out() -> None:
     sign_out_user()
-    st.rerun()
+    try:
+        st.switch_page("app.py")
+    except Exception:
+        st.rerun()
 
 
 configure_page("Track History")

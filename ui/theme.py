@@ -281,7 +281,7 @@ def render_top_nav(
                 on_signout()
             else:
                 st.session_state.clear()
-                st.rerun()
+                _go(HOME_PAGE)
 
 
 def render_page_header(title: str, subtitle: str) -> None:

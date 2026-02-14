@@ -19,7 +19,10 @@ def _go_to_main_page() -> None:
 
 def _sign_out() -> None:
     sign_out_user()
-    st.rerun()
+    try:
+        st.switch_page("app.py")
+    except Exception:
+        st.rerun()
 
 
 configure_page("Further Analysis")

@@ -30,7 +30,10 @@ def _compute_runtime_bundle(
 
 def _sign_out() -> None:
     sign_out_user()
-    st.rerun()
+    try:
+        st.switch_page("app.py")
+    except Exception:
+        st.rerun()
 
 
 configure_page("Attempt Analysis")
