@@ -20,7 +20,9 @@ def bootstrap_auth_session_from_query() -> str | None:
         else:
             qp[k] = v
 
-    if "token_hash" not in qp or "type" not in qp:
+    has_otp_callback = "token_hash" in qp and "type" in qp
+    has_code_callback = "code" in qp
+    if not has_otp_callback and not has_code_callback:
         return None
 
     try:
@@ -28,7 +30,7 @@ def bootstrap_auth_session_from_query() -> str | None:
         if session:
             st.session_state["auth_session"] = session
             # clear token params after successful consume
-            for key in ("token_hash", "type", "next"):
+            for key in ("token_hash", "type", "code", "next"):
                 if key in st.query_params:
                     del st.query_params[key]
             return "Logged in successfully."

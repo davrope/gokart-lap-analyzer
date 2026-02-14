@@ -9,6 +9,7 @@ class _FakeAuth:
     def __init__(self) -> None:
         self.last_otp_payload = None
         self.last_verify_payload = None
+        self.last_exchange_code = None
         self.session_set = None
         self.signed_out = False
         self.user_payload = {"id": "u1", "email": "driver@example.com"}
@@ -22,6 +23,18 @@ class _FakeAuth:
         class S:
             access_token = "at"
             refresh_token = "rt"
+
+        class R:
+            session = S()
+
+        return R()
+
+    def exchange_code_for_session(self, code):
+        self.last_exchange_code = code
+
+        class S:
+            access_token = "at_code"
+            refresh_token = "rt_code"
 
         class R:
             session = S()
@@ -66,6 +79,12 @@ class AuthServiceTests(unittest.TestCase):
         self.assertIsNotNone(session)
         self.assertEqual(self.client.auth.last_verify_payload["token_hash"], "abc")
         self.assertEqual(self.client.auth.session_set, ("at", "rt"))
+
+    def test_consume_magic_link_code_flow(self) -> None:
+        session = self.svc.consume_magic_link({"code": "pkce-code"})
+        self.assertIsNotNone(session)
+        self.assertEqual(self.client.auth.last_exchange_code, "pkce-code")
+        self.assertEqual(self.client.auth.session_set, ("at_code", "rt_code"))
 
     def test_current_user(self) -> None:
         user = self.svc.current_user()

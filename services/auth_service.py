@@ -30,6 +30,14 @@ class AuthService:
         )
 
     def consume_magic_link(self, query_params: dict[str, Any]) -> dict[str, Any] | None:
+        code = str(query_params.get("code", "")).strip()
+        if code:
+            result = self.client.auth.exchange_code_for_session(code)
+            session = self._extract_session(result)
+            if session is None:
+                return None
+            return self._persist_and_dump_session(session)
+
         token_hash = str(query_params.get("token_hash", "")).strip()
         otp_type = str(query_params.get("type", "")).strip()
         if not token_hash or not otp_type:
@@ -41,12 +49,19 @@ class AuthService:
                 "type": otp_type,
             }
         )
-        session = getattr(result, "session", None)
-        if session is None and isinstance(result, dict):
-            session = result.get("session")
+        session = self._extract_session(result)
         if session is None:
             return None
 
+        return self._persist_and_dump_session(session)
+
+    def _extract_session(self, result: Any) -> Any | None:
+        session = getattr(result, "session", None)
+        if session is None and isinstance(result, dict):
+            session = result.get("session")
+        return session
+
+    def _persist_and_dump_session(self, session: Any) -> dict[str, Any]:
         access_token = getattr(session, "access_token", None)
         refresh_token = getattr(session, "refresh_token", None)
         if access_token and refresh_token:
@@ -54,11 +69,7 @@ class AuthService:
                 self.client.auth.set_session(access_token, refresh_token)
             except Exception:
                 pass
-
-        return {
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-        }
+        return {"access_token": access_token, "refresh_token": refresh_token}
 
     def current_user(self) -> AuthUser | None:
         result = self.client.auth.get_user()
