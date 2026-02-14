@@ -10,6 +10,7 @@ class _FakeAuth:
         self.last_otp_payload = None
         self.last_verify_payload = None
         self.last_exchange_code = None
+        self.last_oauth_payload = None
         self.session_set = None
         self.signed_out = False
         self.user_payload = {"id": "u1", "email": "driver@example.com"}
@@ -30,7 +31,7 @@ class _FakeAuth:
         return R()
 
     def exchange_code_for_session(self, code):
-        self.last_exchange_code = code
+        self.last_exchange_code = code.get("auth_code")
 
         class S:
             access_token = "at_code"
@@ -40,6 +41,10 @@ class _FakeAuth:
             session = S()
 
         return R()
+
+    def sign_in_with_oauth(self, payload):
+        self.last_oauth_payload = payload
+        return {"url": "https://accounts.google.com/o/oauth2/v2/auth?state=abc"}
 
     def set_session(self, access, refresh):
         self.session_set = (access, refresh)
@@ -85,6 +90,15 @@ class AuthServiceTests(unittest.TestCase):
         self.assertIsNotNone(session)
         self.assertEqual(self.client.auth.last_exchange_code, "pkce-code")
         self.assertEqual(self.client.auth.session_set, ("at_code", "rt_code"))
+
+    def test_get_google_auth_url(self) -> None:
+        url = self.svc.get_google_auth_url()
+        self.assertIn("accounts.google.com", url)
+        self.assertEqual(self.client.auth.last_oauth_payload["provider"], "google")
+        self.assertEqual(
+            self.client.auth.last_oauth_payload["options"]["redirect_to"],
+            "https://app.example.com",
+        )
 
     def test_current_user(self) -> None:
         user = self.svc.current_user()

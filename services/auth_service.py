@@ -29,10 +29,36 @@ class AuthService:
             }
         )
 
+    def get_google_auth_url(self) -> str:
+        result = self.client.auth.sign_in_with_oauth(
+            {
+                "provider": "google",
+                "options": {"redirect_to": self.app_base_url or None},
+            }
+        )
+        if isinstance(result, dict):
+            direct = str(result.get("url", "")).strip()
+            if direct:
+                return direct
+            data = result.get("data")
+            if isinstance(data, dict):
+                nested = str(data.get("url", "")).strip()
+                if nested:
+                    return nested
+        direct_attr = str(getattr(result, "url", "")).strip()
+        if direct_attr:
+            return direct_attr
+        data_attr = getattr(result, "data", None)
+        if isinstance(data_attr, dict):
+            nested_attr = str(data_attr.get("url", "")).strip()
+            if nested_attr:
+                return nested_attr
+        raise RuntimeError("Supabase did not return an OAuth URL for Google login.")
+
     def consume_magic_link(self, query_params: dict[str, Any]) -> dict[str, Any] | None:
         code = str(query_params.get("code", "")).strip()
         if code:
-            result = self.client.auth.exchange_code_for_session(code)
+            result = self.client.auth.exchange_code_for_session({"auth_code": code})
             session = self._extract_session(result)
             if session is None:
                 return None

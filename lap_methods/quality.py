@@ -4,6 +4,17 @@ import numpy as np
 import pandas as pd
 
 
+def _param_value(params, key: str, default: float) -> float:
+    if isinstance(params, dict):
+        value = params.get(key, default)
+    else:
+        value = getattr(params, key, default)
+    try:
+        return float(value)
+    except Exception:
+        return float(default)
+
+
 def _meters_per_deg(lat_deg: float):
     m_per_deg_lat = 111132.0
     m_per_deg_lon = 111320.0 * np.cos(np.radians(lat_deg))
@@ -48,6 +59,9 @@ def quality_summary_gps_gate(result: dict, params) -> dict:
     laps: pd.DataFrame = result["laps"]
     lap_metrics: pd.DataFrame = result["lap_metrics"]
     dist: np.ndarray = result["dist"]
+    speed_for_gate = _param_value(params, "speed_for_gate", 18.0)
+    near_m = _param_value(params, "near_m", 12.0)
+    min_lap_s = _param_value(params, "min_lap_s", 30.0)
 
     out = {}
 
@@ -128,7 +142,7 @@ def quality_summary_gps_gate(result: dict, params) -> dict:
         out["boundary_spread_m"] = float(np.sqrt(np.nanvar(bx) + np.nanvar(by)))  # radial-ish spread
         out["boundary_speed_mean_kmh"] = float(np.nanmean(b["speed_kmh"]))
         out["boundary_speed_min_kmh"] = float(np.nanmin(b["speed_kmh"]))
-        out["boundary_fast_frac"] = float(np.mean(b["speed_kmh"].to_numpy(dtype=float) >= float(params.speed_for_gate)))
+        out["boundary_fast_frac"] = float(np.mean(b["speed_kmh"].to_numpy(dtype=float) >= speed_for_gate))
         out["boundary_dist_mean_m"] = float(np.nanmean(dist[pass_idx]))
         out["boundary_dist_max_m"] = float(np.nanmax(dist[pass_idx]))
     else:
@@ -167,7 +181,7 @@ def quality_summary_gps_gate(result: dict, params) -> dict:
         # We call gps_gate.detect_passes_by_minima for consistent behavior:
         # (it recomputes dt_s from gps2 timestamps)
         dist2b, pass_idx2, _dt2 = detect_passes_by_minima(
-            gps2, gate_lat, gate_lon, near_m=float(params.near_m), min_lap_s=float(params.min_lap_s)
+            gps2, gate_lat, gate_lon, near_m=near_m, min_lap_s=min_lap_s
         )
 
         t1 = gps.loc[pass_idx, "timestamp"].to_numpy()
