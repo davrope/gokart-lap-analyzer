@@ -12,12 +12,18 @@ from services import (
     get_attempt_repository,
     get_authenticated_user,
     get_track_repository,
+    sign_out_user,
     supabase_configured,
 )
+from ui import configure_page, render_page_header, render_top_nav
 
 
-st.set_page_config(page_title="Track History", layout="wide")
-st.title("Track History")
+def _sign_out() -> None:
+    sign_out_user()
+    st.rerun()
+
+
+configure_page("Track History")
 
 cfg = get_app_config()
 if not cfg.multi_attempt_mode:
@@ -31,6 +37,17 @@ user = get_authenticated_user()
 if user is None:
     st.warning("Please log in from the landing page first.")
     st.stop()
+
+render_top_nav(
+    active_page="history",
+    user_label=user.email or user.id,
+    show_signout=True,
+    on_signout=_sign_out,
+)
+render_page_header(
+    "Track History",
+    "Compare attempts over time, monitor consistency, and identify the curves with highest time-loss potential.",
+)
 
 track_repo = get_track_repository()
 attempt_repo = get_attempt_repository()

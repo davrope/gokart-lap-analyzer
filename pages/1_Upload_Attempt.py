@@ -16,8 +16,10 @@ from services import (
     get_storage_service,
     get_track_repository,
     run_attempt_analysis,
+    sign_out_user,
     supabase_configured,
 )
+from ui import configure_page, render_page_header, render_top_nav
 
 
 ATTEMPT_PAGE = "pages/2_Attempt_Analysis.py"
@@ -27,11 +29,15 @@ def _go_attempt_page() -> None:
     try:
         st.switch_page(ATTEMPT_PAGE)
     except Exception:
-        st.info("Open Attempt Analysis from the sidebar pages menu.")
+        st.info("Use the top navigation buttons to open Attempt Analysis.")
 
 
-st.set_page_config(page_title="Upload Attempt", layout="wide")
-st.title("Upload Attempt")
+def _sign_out() -> None:
+    sign_out_user()
+    st.rerun()
+
+
+configure_page("Upload Attempt")
 
 cfg = get_app_config()
 if not cfg.multi_attempt_mode:
@@ -45,6 +51,17 @@ user = get_authenticated_user()
 if user is None:
     st.warning("Please log in from the landing page first.")
     st.stop()
+
+render_top_nav(
+    active_page="upload",
+    user_label=user.email or user.id,
+    show_signout=True,
+    on_signout=_sign_out,
+)
+render_page_header(
+    "Upload Attempt",
+    "Select or create a track, upload a FIT file, and persist a fully processed attempt.",
+)
 
 track_repo = get_track_repository()
 attempt_repo = get_attempt_repository()

@@ -9,9 +9,10 @@ from services import (
     get_storage_service,
     get_track_repository,
     run_attempt_analysis,
+    sign_out_user,
     supabase_configured,
 )
-from ui import render_advanced_analysis, render_overview_analysis
+from ui import configure_page, render_advanced_analysis, render_overview_analysis, render_page_header, render_top_nav
 
 
 @st.cache_data(show_spinner=False)
@@ -27,8 +28,12 @@ def _compute_runtime_bundle(
     return run_attempt_analysis(fit_bytes=fit_bytes, method_name=method_name, params_json=params_json)
 
 
-st.set_page_config(page_title="Attempt Analysis", layout="wide")
-st.title("Attempt Analysis")
+def _sign_out() -> None:
+    sign_out_user()
+    st.rerun()
+
+
+configure_page("Attempt Analysis")
 
 cfg = get_app_config()
 if not cfg.multi_attempt_mode:
@@ -42,6 +47,17 @@ user = get_authenticated_user()
 if user is None:
     st.warning("Please log in from the landing page first.")
     st.stop()
+
+render_top_nav(
+    active_page="attempt",
+    user_label=user.email or user.id,
+    show_signout=True,
+    on_signout=_sign_out,
+)
+render_page_header(
+    "Attempt Analysis",
+    "Choose a track and processed attempt, then inspect overview and advanced telemetry in one place.",
+)
 
 track_repo = get_track_repository()
 attempt_repo = get_attempt_repository()

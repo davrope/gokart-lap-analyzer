@@ -13,19 +13,19 @@ from services import (
     sign_out_user,
     supabase_configured,
 )
-
-
-UPLOAD_PAGE = "pages/1_Upload_Attempt.py"
-ATTEMPT_PAGE = "pages/2_Attempt_Analysis.py"
-HISTORY_PAGE = "pages/3_Track_History.py"
-FURTHER_PAGE = "pages/4_Further_Analysis.py"
+from ui import ATTEMPT_PAGE, FURTHER_PAGE, HISTORY_PAGE, UPLOAD_PAGE, configure_page, render_page_header, render_top_nav
 
 
 def _go(page: str) -> None:
     try:
         st.switch_page(page)
     except Exception:
-        st.info("Use the sidebar pages menu to navigate.")
+        st.info("Page navigation is temporarily unavailable. Use the top navigation buttons.")
+
+
+def _sign_out() -> None:
+    sign_out_user()
+    st.rerun()
 
 
 def _render_google_button(url: str) -> None:
@@ -45,12 +45,11 @@ def _render_google_button(url: str) -> None:
     )
 
 
-st.set_page_config(page_title="GoKart Coaching Platform", layout="wide")
+configure_page("GoKart Coaching Platform")
 
 cfg = get_app_config()
 if not cfg.multi_attempt_mode:
-    st.title("GoKart Coaching Platform")
-    st.info("`MULTI_ATTEMPT_MODE` is disabled. Enable it in Streamlit secrets or environment to use this workflow.")
+    st.error("`MULTI_ATTEMPT_MODE` is disabled. Enable it in env/secrets to use this workflow.")
     st.stop()
 
 status_msg = bootstrap_auth_session_from_query()
@@ -58,8 +57,9 @@ if status_msg:
     st.success(status_msg)
 
 if not supabase_configured(cfg):
+    render_top_nav(active_page="home", show_links=False)
     st.error(
-        "Supabase is not configured. Add `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `APP_BASE_URL` in Streamlit secrets."
+        "Supabase is not configured. Add `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `APP_BASE_URL` in Streamlit secrets or `.env`."
     )
     st.code(
         """
@@ -71,49 +71,36 @@ MULTI_ATTEMPT_MODE="true"
     )
     st.stop()
 
-st.markdown(
-    """
-<style>
-.hero-wrap {padding: 1.4rem; border-radius: 18px; background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%); border: 1px solid #dbeafe;}
-.eyebrow {letter-spacing: .08em; text-transform: uppercase; font-size: .74rem; color: #1d4ed8; font-weight: 700;}
-.hero-title {font-size: 2.1rem; line-height: 1.15; margin: .4rem 0 .7rem 0; color: #0f172a; font-weight: 800;}
-.hero-copy {font-size: 1.03rem; color: #334155; margin-bottom: 0;}
-.card {padding: 1rem; border: 1px solid #e5e7eb; border-radius: 14px; background: #ffffff;}
-.minor {color: #64748b; font-size: .92rem;}
-</style>
-""",
-    unsafe_allow_html=True,
-)
-
 user = get_authenticated_user()
 
 if user is None:
-    left, right = st.columns([1.6, 1.0], vertical_alignment="top")
+    render_top_nav(active_page="home", show_links=False)
+    left, right = st.columns([1.45, 1.0], gap="large", vertical_alignment="top")
 
     with left:
         st.markdown(
             """
-<div class="hero-wrap">
-  <div class="eyebrow">GoKart Data Coach</div>
-  <div class="hero-title">Turn your FIT telemetry into faster, repeatable lap times.</div>
+<div class="hero-panel">
+  <div class="hero-kicker">GoKart Data Coach</div>
+  <h1 class="hero-headline">Find and fix the corners where lap time is leaking.</h1>
   <p class="hero-copy">
-    Upload attempts, detect laps and curves automatically, compare progression by track,
-    and focus training on the corners where you lose the most time.
+    Upload Garmin FIT attempts, detect laps and curves automatically, compare historical progression,
+    and train with objective telemetry-driven guidance.
   </p>
 </div>
 """,
             unsafe_allow_html=True,
         )
 
-        f1, f2, f3 = st.columns(3)
-        f1.metric("Telemetry", "GPS + Speed")
-        f2.metric("Analysis", "Lap + Curve")
-        f3.metric("Progress", "Attempt History")
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Telemetry", "GPS + Speed")
+        m2.metric("Analysis", "Lap + Curve")
+        m3.metric("Progress", "Attempt History")
 
     with right:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.subheader("Sign in")
-        st.caption("Use passwordless email or Google via Supabase Auth")
+        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.markdown('<p class="section-title" style="font-size:1.55rem;margin-top:0.1rem;">Sign In</p>', unsafe_allow_html=True)
+        st.caption("Passwordless access with Supabase auth")
 
         google_url = ""
         try:
@@ -123,7 +110,7 @@ if user is None:
 
         if google_url:
             _render_google_button(google_url)
-            st.caption("If Google auth fails, verify Google provider is enabled in Supabase Auth settings.")
+            st.caption("If Google fails, verify provider config and redirect URLs in Supabase.")
 
         st.markdown("##### Email magic link")
         with st.form("login_form"):
@@ -137,46 +124,85 @@ if user is None:
             except Exception as exc:
                 st.error(f"Failed to send magic link: {exc}")
 
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown('<p class="section-title">What You Can Do</p>', unsafe_allow_html=True)
+    f1, f2, f3 = st.columns(3, gap="small")
+    with f1:
         st.markdown(
             """
-<p class="minor">
-After login, you can upload attempts, review detailed telemetry, and track improvements across sessions.
-</p>
+<div class="step-item">
+  <div class="step-num">ATTEMPT ANALYSIS</div>
+  <div class="step-name">Inspect one session deeply</div>
+  <div class="step-copy">Lap metrics, speed profile, line geometry, and curve-level behavior in one flow.</div>
+</div>
 """,
             unsafe_allow_html=True,
         )
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    st.markdown("### What you get")
-    g1, g2, g3 = st.columns(3)
-    with g1:
-        st.markdown("**Attempt Analysis**")
-        st.caption("Inspect one session with lap stats, speed profile, and curve-level behavior.")
-    with g2:
-        st.markdown("**Historical Trends**")
-        st.caption("Track best lap evolution, consistency, and curve improvements over time.")
-    with g3:
-        st.markdown("**Coaching-Ready Insights**")
-        st.caption("Structured summaries designed to plug into an LLM recommendation layer later.")
-
-    st.stop()
-
-st.markdown(
-    f"""
-<div class="hero-wrap">
-  <div class="eyebrow">Welcome back</div>
-  <div class="hero-title" style="font-size:1.5rem;">{user.email or user.id}</div>
-  <p class="hero-copy">Choose a workflow step to upload data, inspect attempts, or compare long-term progression.</p>
+    with f2:
+        st.markdown(
+            """
+<div class="step-item">
+  <div class="step-num">TRACK HISTORY</div>
+  <div class="step-name">Track progress over time</div>
+  <div class="step-copy">Best lap trend, consistency drift, and curve-specific opportunities per attempt.</div>
 </div>
 """,
-    unsafe_allow_html=True,
+            unsafe_allow_html=True,
+        )
+    with f3:
+        st.markdown(
+            """
+<div class="step-item">
+  <div class="step-num">COACHING LAYER</div>
+  <div class="step-name">Generate structured insights</div>
+  <div class="step-copy">A recommendation architecture ready for a future LLM provider integration.</div>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+
+    st.markdown('<p class="section-title">Workflow</p>', unsafe_allow_html=True)
+    st.markdown(
+        """
+<div class="step-grid">
+  <div class="step-item">
+    <div class="step-num">01</div>
+    <div class="step-name">Authenticate</div>
+    <div class="step-copy">Email magic link or Google sign-in through Supabase.</div>
+  </div>
+  <div class="step-item">
+    <div class="step-num">02</div>
+    <div class="step-name">Upload FIT Attempt</div>
+    <div class="step-copy">Attach the attempt to an existing track or create a new one.</div>
+  </div>
+  <div class="step-item">
+    <div class="step-num">03</div>
+    <div class="step-name">Review Attempt</div>
+    <div class="step-copy">Understand where speed is gained or lost across each lap and curve.</div>
+  </div>
+  <div class="step-item">
+    <div class="step-num">04</div>
+    <div class="step-name">Compare History</div>
+    <div class="step-copy">Validate improvements and prioritize your next training actions.</div>
+  </div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+    st.stop()
+
+render_top_nav(
+    active_page="home",
+    user_label=user.email or user.id,
+    show_signout=True,
+    on_signout=_sign_out,
 )
 
-row1, row2 = st.columns([3, 1])
-with row2:
-    if st.button("Sign out", use_container_width=True):
-        sign_out_user()
-        st.rerun()
+render_page_header(
+    "Driver Command Center",
+    "Pick your next action: upload fresh telemetry, inspect a specific attempt, or review track progress.",
+)
 
 tracks_count = 0
 attempts_count = 0
@@ -204,25 +230,49 @@ c1.metric("Tracks", f"{tracks_count}")
 c2.metric("Attempts", f"{attempts_count}")
 c3.metric("Personal Best", f"{best_lap_s:.2f}s" if np.isfinite(best_lap_s) else "—")
 
-st.subheader("Workflow")
-w1, w2, w3 = st.columns(3)
+st.markdown('<p class="section-title">Workflow Actions</p>', unsafe_allow_html=True)
+w1, w2, w3 = st.columns(3, gap="small")
 with w1:
-    st.markdown("**1) Upload Attempt**")
-    st.caption("Upload FIT and attach to an existing or new track.")
-    if st.button("Open Upload", key="goto_upload", use_container_width=True, type="primary"):
+    st.markdown(
+        """
+<div class="step-item">
+  <div class="step-num">STEP 1</div>
+  <div class="step-name">Upload Attempt</div>
+  <div class="step-copy">Import a FIT file and process it under a specific track profile.</div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+    if st.button("Open Upload Workspace", key="goto_upload", use_container_width=True, type="primary"):
         _go(UPLOAD_PAGE)
 with w2:
-    st.markdown("**2) Attempt Analysis**")
-    st.caption("Review one attempt with overview and advanced telemetry.")
+    st.markdown(
+        """
+<div class="step-item">
+  <div class="step-num">STEP 2</div>
+  <div class="step-name">Attempt Analysis</div>
+  <div class="step-copy">Review one attempt with overview and advanced curve analytics.</div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
     if st.button("Open Attempt Analysis", key="goto_attempt", use_container_width=True):
         _go(ATTEMPT_PAGE)
 with w3:
-    st.markdown("**3) Track History**")
-    st.caption("Compare attempts and identify where time is still being lost.")
+    st.markdown(
+        """
+<div class="step-item">
+  <div class="step-num">STEP 3</div>
+  <div class="step-name">Track History</div>
+  <div class="step-copy">Compare progression over sessions and identify coaching priorities.</div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
     if st.button("Open Track History", key="goto_history", use_container_width=True):
         _go(HISTORY_PAGE)
 
-with st.expander("Advanced Single-Session Page"):
-    st.caption("Standalone advanced view from the current session context.")
+with st.expander("Advanced Single-Session View"):
+    st.caption("Standalone advanced diagnostics page from current session context.")
     if st.button("Open Advanced Session Page", use_container_width=True, key="goto_further"):
         _go(FURTHER_PAGE)
