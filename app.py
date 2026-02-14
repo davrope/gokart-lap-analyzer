@@ -100,7 +100,7 @@ if user is None:
     with right:
         st.markdown('<div class="glass-card">', unsafe_allow_html=True)
         st.markdown('<p class="section-title" style="font-size:1.55rem;margin-top:0.1rem;">Sign In</p>', unsafe_allow_html=True)
-        st.caption("Passwordless access with Supabase auth")
+        st.caption("Continue with Google (Supabase Auth)")
 
         google_url = ""
         try:
@@ -110,19 +110,9 @@ if user is None:
 
         if google_url:
             _render_google_button(google_url)
-            st.caption("If Google fails, verify provider config and redirect URLs in Supabase.")
-
-        st.markdown("##### Email magic link")
-        with st.form("login_form"):
-            email = st.text_input("Email", placeholder="driver@example.com")
-            submitted = st.form_submit_button("Send magic link", type="primary", use_container_width=True)
-
-        if submitted:
-            try:
-                get_auth_service().send_magic_link(email)
-                st.success("Magic link sent. Check your email and return to this page.")
-            except Exception as exc:
-                st.error(f"Failed to send magic link: {exc}")
+            st.caption("If login fails, verify Google provider config and redirect URLs in Supabase.")
+        else:
+            st.info("Google login is currently unavailable. Check Supabase provider settings.")
 
         st.markdown("</div>", unsafe_allow_html=True)
 

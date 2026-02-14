@@ -85,6 +85,13 @@ class AuthServiceTests(unittest.TestCase):
         self.assertEqual(self.client.auth.last_verify_payload["token_hash"], "abc")
         self.assertEqual(self.client.auth.session_set, ("at", "rt"))
 
+    def test_consume_magic_link_with_token_param_and_magiclink_type(self) -> None:
+        session = self.svc.consume_magic_link({"token": "abc-token", "type": "magiclink"})
+        self.assertIsNotNone(session)
+        self.assertEqual(self.client.auth.last_verify_payload["token"], "abc-token")
+        self.assertEqual(self.client.auth.last_verify_payload["type"], "email")
+        self.assertEqual(self.client.auth.session_set, ("at", "rt"))
+
     def test_consume_magic_link_code_flow(self) -> None:
         session = self.svc.consume_magic_link({"code": "pkce-code"})
         self.assertIsNotNone(session)
@@ -109,6 +116,12 @@ class AuthServiceTests(unittest.TestCase):
     def test_sign_out(self) -> None:
         self.svc.sign_out()
         self.assertTrue(self.client.auth.signed_out)
+
+    def test_persist_dict_session(self) -> None:
+        session = self.svc._persist_and_dump_session({"access_token": "at2", "refresh_token": "rt2"})
+        self.assertEqual(session["access_token"], "at2")
+        self.assertEqual(session["refresh_token"], "rt2")
+        self.assertEqual(self.client.auth.session_set, ("at2", "rt2"))
 
 
 if __name__ == "__main__":

@@ -65,15 +65,22 @@ class AuthService:
             return self._persist_and_dump_session(session)
 
         token_hash = str(query_params.get("token_hash", "")).strip()
+        token = str(query_params.get("token", "")).strip()
         otp_type = str(query_params.get("type", "")).strip()
-        if not token_hash or not otp_type:
+        if otp_type == "magiclink":
+            # Supabase OTP verification accepts "email" for email magic links.
+            otp_type = "email"
+        if not otp_type or (not token_hash and not token):
             return None
 
+        verify_payload: dict[str, Any] = {"type": otp_type}
+        if token_hash:
+            verify_payload["token_hash"] = token_hash
+        elif token:
+            verify_payload["token"] = token
+
         result = self.client.auth.verify_otp(
-            {
-                "token_hash": token_hash,
-                "type": otp_type,
-            }
+            verify_payload
         )
         session = self._extract_session(result)
         if session is None:
@@ -82,14 +89,22 @@ class AuthService:
         return self._persist_and_dump_session(session)
 
     def _extract_session(self, result: Any) -> Any | None:
+        # Some SDK paths can return the session directly.
+        if isinstance(result, dict):
+            if "session" in result:
+                return result.get("session")
+            if "access_token" in result and "refresh_token" in result:
+                return result
         session = getattr(result, "session", None)
-        if session is None and isinstance(result, dict):
-            session = result.get("session")
         return session
 
     def _persist_and_dump_session(self, session: Any) -> dict[str, Any]:
-        access_token = getattr(session, "access_token", None)
-        refresh_token = getattr(session, "refresh_token", None)
+        if isinstance(session, dict):
+            access_token = session.get("access_token")
+            refresh_token = session.get("refresh_token")
+        else:
+            access_token = getattr(session, "access_token", None)
+            refresh_token = getattr(session, "refresh_token", None)
         if access_token and refresh_token:
             try:
                 self.client.auth.set_session(access_token, refresh_token)

@@ -91,7 +91,13 @@ if track_mode == "Use existing track":
 else:
     with st.form("new_track_form"):
         t_name = st.text_input("Track name")
-        t_direction = st.selectbox("Layout direction", ["unknown", "cw", "ccw"])
+        direction_options = {
+            "Unknown": "unknown",
+            "Clockwise": "cw",
+            "Counter - Clockwise": "ccw",
+        }
+        direction_label = st.selectbox("Layout direction", list(direction_options.keys()))
+        t_direction = direction_options[direction_label]
         t_variant = st.text_input("Layout variant (optional)")
         t_location = st.text_input("Location (optional)")
         create_track = st.form_submit_button("Create track")
