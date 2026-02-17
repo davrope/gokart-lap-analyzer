@@ -206,24 +206,28 @@ def plot_curve_geometry(reference_path: pd.DataFrame, curves_geometry: pd.DataFr
         cid = int(row["curve_id"])
 
         if s1 >= s0:
-            m = (reference_path["s_m"] >= s0) & (reference_path["s_m"] <= s1)
+            # Normal case: one continuous segment.
+            segments = [reference_path[(reference_path["s_m"] >= s0) & (reference_path["s_m"] <= s1)]]
         else:
-            m = (reference_path["s_m"] >= s0) | (reference_path["s_m"] <= s1)
+            # Wrapped case: split in two so Plotly does not connect across start/finish.
+            segments = [
+                reference_path[reference_path["s_m"] >= s0],
+                reference_path[reference_path["s_m"] <= s1],
+            ]
 
-        seg = reference_path[m]
-        if seg.empty:
-            continue
-
-        fig.add_trace(
-            go.Scatter(
-                x=seg["x_center_m"],
-                y=seg["y_center_m"],
-                mode="lines",
-                name=f"Curve {cid}",
-                line=dict(width=3, color=PALETTE["curve"]),
-                showlegend=False,
+        for seg in segments:
+            if seg.empty:
+                continue
+            fig.add_trace(
+                go.Scatter(
+                    x=seg["x_center_m"],
+                    y=seg["y_center_m"],
+                    mode="lines",
+                    name=f"Curve {cid}",
+                    line=dict(width=3, color=PALETTE["curve"]),
+                    showlegend=False,
+                )
             )
-        )
 
         j = int(np.argmin(np.abs(reference_path["s_m"].to_numpy() - float(row["s_apex_m"]))))
         fig.add_trace(
