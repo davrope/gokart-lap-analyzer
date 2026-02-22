@@ -101,6 +101,22 @@ class _FakeClient:
         return _FakeQuery(name, self.store)
 
 
+class _FakeQueryMissingAttemptName(_FakeQuery):
+    def execute(self):
+        if self.table_name == "attempts" and self.action == "insert":
+            payloads = self.payload if isinstance(self.payload, list) else [self.payload]
+            if any("attempt_name" in p for p in payloads):
+                raise RuntimeError(
+                    "{'message': \"Could not find the 'attempt_name' column of 'attempts' in the schema cache\", 'code': 'PGRST204'}"
+                )
+        return super().execute()
+
+
+class _FakeClientMissingAttemptName(_FakeClient):
+    def table(self, name):
+        return _FakeQueryMissingAttemptName(name, self.store)
+
+
 class RepositoriesTests(unittest.TestCase):
     def setUp(self) -> None:
         self.store = {
@@ -161,6 +177,75 @@ class RepositoriesTests(unittest.TestCase):
 
         self.assertEqual(len(self.store["attempt_laps"]), 2)
         self.assertEqual(len(self.store["attempt_curves"]), 1)
+
+    def test_update_and_delete_attempt(self) -> None:
+        self.attempt_repo.create_attempt(
+            {
+                "id": "a3",
+                "user_id": "u1",
+                "track_id": "t1",
+                "attempt_name": "Morning run",
+                "source_filename": "session.fit",
+                "storage_bucket": "fit-files",
+                "storage_path": "u1/a3/session.fit",
+                "status": "uploaded",
+                "method_name": "GPS Gate (fast-points + distance minima)",
+                "params_json": {},
+            }
+        )
+
+        renamed = self.attempt_repo.update_attempt_name("a3", "  Quali 1  ")
+        self.assertEqual(renamed["attempt_name"], "Quali 1")
+
+        deleted = self.attempt_repo.delete_attempt("a3")
+        self.assertTrue(deleted)
+        self.assertEqual(self.store["attempts"], [])
+
+    def test_update_attempt_name_rejects_empty(self) -> None:
+        self.attempt_repo.create_attempt(
+            {
+                "id": "a4",
+                "user_id": "u1",
+                "track_id": "t1",
+                "source_filename": "session.fit",
+                "storage_bucket": "fit-files",
+                "storage_path": "u1/a4/session.fit",
+                "status": "uploaded",
+                "method_name": "GPS Gate (fast-points + distance minima)",
+                "params_json": {},
+            }
+        )
+
+        with self.assertRaises(ValueError):
+            self.attempt_repo.update_attempt_name("a4", "   ")
+
+    def test_create_attempt_fallback_without_attempt_name_column(self) -> None:
+        store = {
+            "tracks": [],
+            "attempts": [],
+            "attempt_laps": [],
+            "attempt_curves": [],
+        }
+        repo = AttemptRepository(_FakeClientMissingAttemptName(store))
+
+        created = repo.create_attempt(
+            {
+                "id": "a5",
+                "user_id": "u1",
+                "track_id": "t1",
+                "attempt_name": "My named attempt",
+                "source_filename": "session.fit",
+                "storage_bucket": "fit-files",
+                "storage_path": "u1/a5/session.fit",
+                "status": "uploaded",
+                "method_name": "GPS Gate (fast-points + distance minima)",
+                "params_json": {},
+            }
+        )
+
+        self.assertEqual(created["id"], "a5")
+        self.assertEqual(len(store["attempts"]), 1)
+        self.assertNotIn("attempt_name", store["attempts"][0])
 
 
 if __name__ == "__main__":

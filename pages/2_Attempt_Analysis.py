@@ -36,6 +36,10 @@ def _sign_out() -> None:
         st.rerun()
 
 
+def _attempt_title(attempt: dict) -> str:
+    return (attempt.get("attempt_name") or attempt.get("source_filename") or "Untitled attempt").strip()
+
+
 configure_page("Attempt Analysis")
 
 cfg = get_app_config()
@@ -64,6 +68,7 @@ render_page_header(
 
 track_repo = get_track_repository()
 attempt_repo = get_attempt_repository()
+storage = get_storage_service()
 
 tracks = track_repo.list_tracks(user.id)
 if not tracks:
@@ -102,22 +107,58 @@ if not attempts:
     st.info("No processed attempts available for this track.")
     st.stop()
 
-attempt_labels = {}
-for a in attempts:
-    label = f"{a.get('uploaded_at', '')} • {a.get('source_filename', '')} • {a.get('status', '')}"
-    attempt_labels[label] = a
+attempt_by_id = {a["id"]: a for a in attempts}
+attempt_ids = list(attempt_by_id.keys())
 
 initial_attempt = st.session_state.get("selected_attempt_id")
 initial_idx = 0
 if initial_attempt:
-    for i, a in enumerate(attempts):
-        if a["id"] == initial_attempt:
+    for i, attempt_id in enumerate(attempt_ids):
+        if attempt_id == initial_attempt:
             initial_idx = i
             break
 
-selected_label = st.selectbox("Attempt", options=list(attempt_labels.keys()), index=initial_idx)
-attempt = attempt_labels[selected_label]
-st.session_state["selected_attempt_id"] = attempt["id"]
+selected_attempt_id = st.selectbox(
+    "Attempt",
+    options=attempt_ids,
+    index=initial_idx,
+    format_func=lambda attempt_id: (
+        f"{_attempt_title(attempt_by_id[attempt_id])} • "
+        f"{attempt_by_id[attempt_id].get('uploaded_at', '')} • "
+        f"{attempt_by_id[attempt_id].get('status', '')}"
+    ),
+)
+attempt = attempt_by_id[selected_attempt_id]
+st.session_state["selected_attempt_id"] = selected_attempt_id
+
+with st.expander("Manage selected attempt"):
+    st.caption("Deleting removes the attempt, derived analytics, and the uploaded FIT file.")
+    confirm_delete = st.checkbox(
+        "I understand this action is permanent.",
+        key=f"delete_attempt_confirm.{attempt['id']}",
+    )
+    delete_clicked = st.button(
+        "Delete attempt",
+        use_container_width=True,
+        disabled=not confirm_delete,
+        key=f"delete_attempt_button.{attempt['id']}",
+    )
+    if delete_clicked:
+        with st.spinner("Deleting attempt..."):
+            try:
+                deleted = attempt_repo.delete_attempt(attempt["id"])
+                if not deleted:
+                    st.warning("Attempt not found. It may have already been deleted.")
+                    st.rerun()
+                try:
+                    storage.delete_fit(attempt["storage_path"])
+                except Exception as storage_exc:
+                    st.warning(f"Attempt deleted, but FIT cleanup failed: {storage_exc}")
+                st.session_state.pop("selected_attempt_id", None)
+                st.success("Attempt deleted.")
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Failed to delete attempt: {exc}")
 
 if attempt.get("status") == "failed":
     st.error(f"Attempt failed: {attempt.get('processing_error') or 'Unknown error'}")
@@ -139,7 +180,7 @@ st.session_state["latest_analysis"] = {
 }
 
 st.caption(
-    f"Attempt ID: {attempt['id']} • Uploaded: {attempt.get('uploaded_at')} • Source: {attempt.get('source_filename')}"
+    f"Attempt ID: {attempt['id']} • Name: {_attempt_title(attempt)} • Uploaded: {attempt.get('uploaded_at')} • Source: {attempt.get('source_filename')}"
 )
 
 tab_overview, tab_advanced = st.tabs(["Overview", "Advanced"])

@@ -25,6 +25,22 @@ from ui import configure_page, render_page_header, render_top_nav
 ATTEMPT_PAGE = "pages/2_Attempt_Analysis.py"
 
 
+def _default_attempt_name(filename: str) -> str:
+    safe_name = (filename or "").strip()
+    if not safe_name:
+        return "Untitled attempt"
+    stem, dot, _suffix = safe_name.rpartition(".")
+    return stem if dot and stem else safe_name
+
+
+def _sync_attempt_name_state(filename: str | None) -> None:
+    selected_name = (filename or "").strip()
+    previous_name = st.session_state.get("upload.last_fit_filename")
+    if selected_name != previous_name:
+        st.session_state["upload.last_fit_filename"] = selected_name
+        st.session_state["upload.attempt_name"] = _default_attempt_name(selected_name) if selected_name else ""
+
+
 def _go_attempt_page() -> None:
     try:
         st.switch_page(ATTEMPT_PAGE)
@@ -131,6 +147,15 @@ params_json = params_to_dict(params)
 
 st.subheader("FIT file")
 uploaded = st.file_uploader("Upload Garmin .FIT", type=["fit"], key="upload.fit")
+_sync_attempt_name_state(uploaded.name if uploaded is not None else None)
+
+attempt_name_input = st.text_input(
+    "Attempt name",
+    key="upload.attempt_name",
+    max_chars=120,
+    disabled=uploaded is None,
+    help="Set the name before uploading. If empty, the file name (without extension) is used.",
+)
 
 if st.button("Process and save attempt", type="primary", use_container_width=True):
     if selected_track_id is None:
@@ -142,6 +167,7 @@ if st.button("Process and save attempt", type="primary", use_container_width=Tru
 
     fit_bytes = uploaded.getvalue()
     filename = uploaded.name
+    attempt_name = (attempt_name_input or "").strip() or _default_attempt_name(filename)
     attempt_id = str(uuid.uuid4())
 
     with st.spinner("Uploading and processing attempt..."):
@@ -152,6 +178,7 @@ if st.button("Process and save attempt", type="primary", use_container_width=Tru
                 "id": attempt_id,
                 "user_id": user.id,
                 "track_id": selected_track_id,
+                "attempt_name": attempt_name,
                 "source_filename": filename,
                 "storage_bucket": "fit-files",
                 "storage_path": storage_path,
@@ -159,7 +186,12 @@ if st.button("Process and save attempt", type="primary", use_container_width=Tru
                 "method_name": method_name,
                 "params_json": params_json,
             }
-            attempt_repo.create_attempt(attempt_payload)
+            created_attempt = attempt_repo.create_attempt(attempt_payload)
+            if attempt_payload.get("attempt_name") and "attempt_name" not in created_attempt:
+                st.info(
+                    "Attempt names are not enabled in this database yet. "
+                    "Upload will continue using the file name."
+                )
 
             analysis_bundle = run_attempt_analysis(
                 fit_bytes=fit_bytes,

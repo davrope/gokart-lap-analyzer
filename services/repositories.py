@@ -25,6 +25,7 @@ class AttemptRecord:
     id: str
     user_id: str
     track_id: str
+    attempt_name: str | None
     source_filename: str
     storage_bucket: str
     storage_path: str
@@ -75,8 +76,33 @@ class AttemptRepository:
     def __init__(self, client: Any) -> None:
         self.client = client
 
+    @staticmethod
+    def _error_text(exc: Exception) -> str:
+        return str(exc).lower()
+
+    @classmethod
+    def _is_missing_attempt_name_column_error(cls, exc: Exception) -> bool:
+        text = cls._error_text(exc)
+        return "attempt_name" in text and ("schema cache" in text or "pgrst204" in text)
+
+    @staticmethod
+    def _sanitize_attempt_name(attempt_name: str) -> str:
+        clean_name = (attempt_name or "").strip()
+        if not clean_name:
+            raise ValueError("Attempt name cannot be empty.")
+        return clean_name
+
     def create_attempt(self, payload: dict[str, Any]) -> dict[str, Any]:
-        resp = self.client.table("attempts").insert(payload).execute()
+        insert_payload = dict(payload)
+        try:
+            resp = self.client.table("attempts").insert(insert_payload).execute()
+        except Exception as exc:
+            # Backward-compatible fallback when DB migration hasn't been applied yet.
+            if "attempt_name" in insert_payload and self._is_missing_attempt_name_column_error(exc):
+                insert_payload.pop("attempt_name", None)
+                resp = self.client.table("attempts").insert(insert_payload).execute()
+            else:
+                raise
         data = getattr(resp, "data", []) or []
         if not data:
             raise RuntimeError("Attempt creation failed")
@@ -120,6 +146,19 @@ class AttemptRepository:
         resp = self.client.table("attempts").select("*").eq("id", attempt_id).limit(1).execute()
         data = getattr(resp, "data", []) or []
         return data[0] if data else None
+
+    def update_attempt_name(self, attempt_id: str, attempt_name: str) -> dict[str, Any]:
+        patch = {"attempt_name": self._sanitize_attempt_name(attempt_name)}
+        resp = self.client.table("attempts").update(patch).eq("id", attempt_id).execute()
+        data = getattr(resp, "data", []) or []
+        if not data:
+            raise RuntimeError("Attempt rename failed")
+        return data[0]
+
+    def delete_attempt(self, attempt_id: str) -> bool:
+        resp = self.client.table("attempts").delete().eq("id", attempt_id).execute()
+        data = getattr(resp, "data", []) or []
+        return bool(data)
 
     def replace_attempt_laps(self, attempt_id: str, lap_rows: list[dict[str, Any]]) -> None:
         self.client.table("attempt_laps").delete().eq("attempt_id", attempt_id).execute()

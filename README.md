@@ -59,8 +59,9 @@ pip install -r requirements.txt
 ## Supabase setup
 
 1. Create a Supabase project.
-2. Run SQL migration in Supabase SQL editor:
+2. Run SQL migrations in Supabase SQL editor (in filename order):
    - `db/migrations/20260212_000001_multi_session.sql`
+   - `db/migrations/20260222_000002_attempt_name.sql`
 3. Configure secrets/environment:
    - Local `.env` (auto-loaded by app): copy from `.env.example`
    - Streamlit Cloud secrets: copy from `.streamlit/secrets.toml.example`

@@ -32,6 +32,9 @@ class StorageService:
             return data.read()
         raise RuntimeError("Unexpected storage download response")
 
+    def delete_fit(self, storage_path: str) -> None:
+        self.client.storage.from_(BUCKET).remove([storage_path])
+
 
 
 def get_storage_service() -> StorageService:
