@@ -73,6 +73,8 @@ class TrackRepository:
 
 
 class AttemptRepository:
+    FALLBACK_ATTEMPT_NAME_KEY = "__attempt_name"
+
     def __init__(self, client: Any) -> None:
         self.client = client
 
@@ -92,14 +94,25 @@ class AttemptRepository:
             raise ValueError("Attempt name cannot be empty.")
         return clean_name
 
+    @classmethod
+    def _params_json_with_attempt_name(cls, params_json: Any, attempt_name: str) -> dict[str, Any]:
+        payload = dict(params_json) if isinstance(params_json, dict) else {}
+        payload[cls.FALLBACK_ATTEMPT_NAME_KEY] = attempt_name
+        return payload
+
     def create_attempt(self, payload: dict[str, Any]) -> dict[str, Any]:
         insert_payload = dict(payload)
+        raw_attempt_name = insert_payload.get("attempt_name")
+        clean_attempt_name = self._sanitize_attempt_name(raw_attempt_name) if raw_attempt_name else None
         try:
             resp = self.client.table("attempts").insert(insert_payload).execute()
         except Exception as exc:
             # Backward-compatible fallback when DB migration hasn't been applied yet.
-            if "attempt_name" in insert_payload and self._is_missing_attempt_name_column_error(exc):
+            if clean_attempt_name and "attempt_name" in insert_payload and self._is_missing_attempt_name_column_error(exc):
                 insert_payload.pop("attempt_name", None)
+                insert_payload["params_json"] = self._params_json_with_attempt_name(
+                    insert_payload.get("params_json"), clean_attempt_name
+                )
                 resp = self.client.table("attempts").insert(insert_payload).execute()
             else:
                 raise
@@ -148,8 +161,20 @@ class AttemptRepository:
         return data[0] if data else None
 
     def update_attempt_name(self, attempt_id: str, attempt_name: str) -> dict[str, Any]:
-        patch = {"attempt_name": self._sanitize_attempt_name(attempt_name)}
-        resp = self.client.table("attempts").update(patch).eq("id", attempt_id).execute()
+        clean_name = self._sanitize_attempt_name(attempt_name)
+        patch = {"attempt_name": clean_name}
+        try:
+            resp = self.client.table("attempts").update(patch).eq("id", attempt_id).execute()
+        except Exception as exc:
+            if not self._is_missing_attempt_name_column_error(exc):
+                raise
+            attempt = self.get_attempt(attempt_id)
+            if attempt is None:
+                raise RuntimeError("Attempt rename failed") from exc
+            fallback_patch = {
+                "params_json": self._params_json_with_attempt_name(attempt.get("params_json"), clean_name),
+            }
+            resp = self.client.table("attempts").update(fallback_patch).eq("id", attempt_id).execute()
         data = getattr(resp, "data", []) or []
         if not data:
             raise RuntimeError("Attempt rename failed")

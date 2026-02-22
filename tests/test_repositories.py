@@ -103,7 +103,7 @@ class _FakeClient:
 
 class _FakeQueryMissingAttemptName(_FakeQuery):
     def execute(self):
-        if self.table_name == "attempts" and self.action == "insert":
+        if self.table_name == "attempts" and self.action in {"insert", "update"}:
             payloads = self.payload if isinstance(self.payload, list) else [self.payload]
             if any("attempt_name" in p for p in payloads):
                 raise RuntimeError(
@@ -246,6 +246,32 @@ class RepositoriesTests(unittest.TestCase):
         self.assertEqual(created["id"], "a5")
         self.assertEqual(len(store["attempts"]), 1)
         self.assertNotIn("attempt_name", store["attempts"][0])
+        self.assertEqual(store["attempts"][0]["params_json"]["__attempt_name"], "My named attempt")
+
+    def test_update_attempt_name_fallback_without_attempt_name_column(self) -> None:
+        store = {
+            "tracks": [],
+            "attempts": [
+                {
+                    "id": "a6",
+                    "user_id": "u1",
+                    "track_id": "t1",
+                    "source_filename": "session.fit",
+                    "storage_bucket": "fit-files",
+                    "storage_path": "u1/a6/session.fit",
+                    "status": "uploaded",
+                    "method_name": "GPS Gate (fast-points + distance minima)",
+                    "params_json": {},
+                }
+            ],
+            "attempt_laps": [],
+            "attempt_curves": [],
+        }
+        repo = AttemptRepository(_FakeClientMissingAttemptName(store))
+
+        updated = repo.update_attempt_name("a6", "Race final")
+        self.assertEqual(updated["params_json"]["__attempt_name"], "Race final")
+        self.assertNotIn("attempt_name", updated)
 
 
 if __name__ == "__main__":
